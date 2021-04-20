@@ -4,39 +4,35 @@ type Node struct {
 
 }
 
-func Join() {
+func (n *Node) Join() {
 
 }
 
-func Leave() {
+func (n *Node) Leave() {
 
 }
 
-func Save(key int, value []byte) {
+func (n *Node) Save(key int, value []byte) {
 
 }
 
-func Delete(key int) {
+func (n *Node) Delete(key int) {
 
 }
 
-func Query(key int) {
+func (n *Node) Query(key int) {
 
 }
 
-func Ping() {
+func (n *Node) HandleChurn() {
 
 }
 
-func HandleChurn() {
+func (n *Node) HandleNewSuccessor() {
 
 }
 
-func HandleNewSuccessor() {
-
-}
-
-func HandleNewPredecessor() {
+func (n *Node) HandleNewPredecessor() {
 
 }
 
