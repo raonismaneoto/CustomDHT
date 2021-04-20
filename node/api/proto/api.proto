@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package proto;
+option go_package = "github.com/raonismaneoto/CustomDHT/node/api/proto";
+
+service DHTNode {
+  rpc Ping (Empty) returns (Empty) {}
+  rpc Successor(Empty) returns (SuccessorResponse) {}
+  rpc Predecessor(Empty) returns (PredecessorResponse) {}
+  rpc HandleNewPredecessor (HandleNewPredecessorRequest) returns (HandleNewPredecessorResponse) {}
+  rpc HandleNewSuccessor (HandleNewSuccessorRequest) returns (HandleNewSuccessorResponse) {}
+  rpc Query (QueryRequest) returns (QueryResponse) {}
+  rpc Save (SaveRequest) returns (SaveResponse) {}
+  rpc Delete (DeleteRequest) returns (DeleteResponse) {}
+  rpc HandleChurn (HandleChurnRequest) returns (HandleChurnResponse) {}
+  rpc SyncData (Empty) returns (SyncDataResponse) {}
+}
+
+message Empty {
+
+}
+
+message SuccessorResponse {
+    int64 id = 1;
+    string endpoint = 2;
+}
+
+message PredecessorResponse {
+    int64 id = 1;
+    string endpoint = 2;
+}
+
+message HandleNewPredecessorRequest {
+    int64 id = 1;
+    string endpoint = 2;
+}
+
+message HandleNewPredecessorResponse {
+    bytes data = 3;
+}
+
+message HandleNewSuccessorRequest {
+    int64 id = 1;
+    string endpoint = 2;
+}
+
+message HandleNewSuccessorResponse {
+    int64 id = 1;
+    string endpoint = 2;
+}
+
+message QueryRequest {
+    int key = 1;
+}
+
+message QueryResponse {
+    bytes data = 1;
+}
+
+message HandleChurnRequest {
+    int64 id = 1;
+    string endpoint = 2;
+}
+
+message HandleChurnResponse {
+    int64 successorId = 1;
+    string successorEndpoint = 2;
+    int64 predecessorId = 1;
+    string predecessorEndpoint = 2;
+}
+
+message SyncDataResponse {
+    bytes data = 1;
+}
+
