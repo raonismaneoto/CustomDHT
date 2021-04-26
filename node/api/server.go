@@ -10,6 +10,7 @@ import (
 	"net"
 )
 
+// maybe a notify and a stabilize message are needed
 type server struct {
 	node *node.Node
 }

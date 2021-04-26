@@ -1,7 +1,16 @@
 package node
 
 type Node struct {
+	fingerTable map[int]string
+	id string
+	address string
+	storage map[int][]byte
+	successor struct {id int; address string}
+	predecessor struct {id int; address string}
+}
 
+func (n *Node) Start() {
+	n.Join()
 }
 
 func (n *Node) Join() {
