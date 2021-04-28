@@ -1,7 +1,7 @@
 syntax = "proto3";
 
-package proto;
-option go_package = "github.com/raonismaneoto/CustomDHT/node/api/proto";
+package grpc_api;
+option go_package = "github.com/raonismaneoto/CustomDHT/node/api/grpc_api";
 
 service DHTNode {
   rpc Ping (Empty) returns (Empty) {}
@@ -13,7 +13,7 @@ service DHTNode {
   rpc Save (SaveRequest) returns (Empty) {}
   rpc Delete (DeleteRequest) returns (Empty) {}
   rpc HandleChurn (HandleChurnRequest) returns (HandleChurnResponse) {}
-  rpc SyncData (Empty) returns (SyncDataResponse) {}
+  rpc SyncData (SyncDataRequest) returns (SyncDataResponse) {}
 }
 
 message Empty {
@@ -69,6 +69,10 @@ message HandleChurnResponse {
     string successorEndpoint = 2;
     int64 predecessorId = 3;
     string predecessorEndpoint = 4;
+}
+
+message SyncDataRequest {
+    int64 id = 1;
 }
 
 message SyncDataResponse {

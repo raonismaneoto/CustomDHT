@@ -1,4 +1,4 @@
-package main
+package helpers
 
 import (
 	"crypto/sha1"
@@ -6,7 +6,7 @@ import (
 	"math"
 )
 
-func getHash(key string, m int) int {
+func GetHash(key string, m int) int {
 	h := sha1.New()
 	h.Write([]byte(key))
 	hash := h.Sum(nil)
@@ -20,8 +20,4 @@ func getHash(key string, m int) int {
 	}
 
 	return sum%int(math.Pow(2.0, float64(m)))
-}
-
-func main() {
-
 }

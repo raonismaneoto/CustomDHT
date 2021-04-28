@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/raonismaneoto/CustomDHT/node"
-	"github.com/raonismaneoto/CustomDHT/node/api/proto"
+	"github.com/raonismaneoto/CustomDHT/node/api/grpc_api"
 	"google.golang.org/grpc"
 	"log"
 	"net"
@@ -15,49 +15,49 @@ type server struct {
 	node *node.Node
 }
 
-func (*server) Ping(ctx context.Context, request *proto.Empty) (*proto.Empty, error) {
-	return &proto.Empty{}, nil
+func (*server) Ping(ctx context.Context, request *grpc_api.Empty) (*grpc_api.Empty, error) {
+	return &grpc_api.Empty{}, nil
 }
 
-func (*server) Successor(ctx context.Context, request *proto.Empty) (*proto.SuccessorResponse, error) {
-	var response *proto.SuccessorResponse
+func (*server) Successor(ctx context.Context, request *grpc_api.Empty) (*grpc_api.SuccessorResponse, error) {
+	var response *grpc_api.SuccessorResponse
 	return response, nil
 }
 
-func (*server) Predecessor(ctx context.Context, request *proto.Empty) (*proto.PredecessorResponse, error) {
-	var response *proto.PredecessorResponse
+func (*server) Predecessor(ctx context.Context, request *grpc_api.Empty) (*grpc_api.PredecessorResponse, error) {
+	var response *grpc_api.PredecessorResponse
 	return response, nil
 }
 
-func (*server) HandleNewPredecessor(ctx context.Context, request *proto.HandleNewPredecessorRequest) (*proto.HandleNewPredecessorResponse, error) {
-	var response *proto.HandleNewPredecessorResponse
+func (*server) HandleNewPredecessor(ctx context.Context, request *grpc_api.HandleNewPredecessorRequest) (*grpc_api.HandleNewPredecessorResponse, error) {
+	var response *grpc_api.HandleNewPredecessorResponse
 	return response, nil
 }
 
-func (*server) HandleNewSuccessor(ctx context.Context, request *proto.HandleNewSuccessorRequest) (*proto.HandleNewSuccessorResponse, error) {
-	var response *proto.HandleNewSuccessorResponse
+func (*server) HandleNewSuccessor(ctx context.Context, request *grpc_api.HandleNewSuccessorRequest) (*grpc_api.HandleNewSuccessorResponse, error) {
+	var response *grpc_api.HandleNewSuccessorResponse
 	return response, nil
 }
 
-func (*server) Query(ctx context.Context, request *proto.QueryRequest) (*proto.QueryResponse, error) {
-	var response *proto.QueryResponse
+func (*server) Query(ctx context.Context, request *grpc_api.QueryRequest) (*grpc_api.QueryResponse, error) {
+	var response *grpc_api.QueryResponse
 	return response, nil
 }
 
-func (*server) Save(ctx context.Context, request *proto.SaveRequest) (*proto.Empty, error) {
-	return &proto.Empty{}, nil
+func (*server) Save(ctx context.Context, request *grpc_api.SaveRequest) (*grpc_api.Empty, error) {
+	return &grpc_api.Empty{}, nil
 }
 
-func (*server) Delete(ctx context.Context, request *proto.DeleteRequest) (*proto.Empty, error) {
-	return &proto.Empty{}, nil
+func (*server) Delete(ctx context.Context, request *grpc_api.DeleteRequest) (*grpc_api.Empty, error) {
+	return &grpc_api.Empty{}, nil
 }
 
-func (*server) HandleChurn(ctx context.Context, request *proto.HandleChurnRequest) (*proto.HandleChurnResponse, error) {
-	return &proto.HandleChurnResponse{}, nil
+func (*server) HandleChurn(ctx context.Context, request *grpc_api.HandleChurnRequest) (*grpc_api.HandleChurnResponse, error) {
+	return &grpc_api.HandleChurnResponse{}, nil
 }
 
-func (*server) SyncData(ctx context.Context, request *proto.Empty) (*proto.SyncDataResponse, error) {
-	return &proto.SyncDataResponse{}, nil
+func (*server) SyncData(ctx context.Context, request *grpc_api.Empty) (*grpc_api.SyncDataResponse, error) {
+	return &grpc_api.SyncDataResponse{}, nil
 }
 
 func main() {
@@ -69,7 +69,7 @@ func main() {
 	fmt.Printf("Server is listening on %v ...", address)
 
 	s := grpc.NewServer()
-	proto.RegisterDHTNodeServer(s, &server{node: &node.Node{}})
+	grpc_api.RegisterDHTNodeServer(s, &server{node: &node.Node{}})
 
 	s.Serve(lis)
 }
