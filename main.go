@@ -23,5 +23,7 @@ func getHash(key string, m int) int {
 }
 
 func main() {
-
+	var a int64
+	a = 91/2
+	println(a)
 }

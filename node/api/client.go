@@ -12,7 +12,40 @@ type Client struct {
 
 }
 
-func (c *Client) Predecessor(address string, key int64) *grpc_api.PredecessorResponse{
+func (c *Client) Ping(address string) (grpc_api.Empty, error){
+	nc, conn := grpcClient(address)
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	response, err := nc.Ping(ctx, &grpc_api.Empty{})
+
+	if err != nil {
+		handleErr(err)
+		return *response, err
+	}
+
+	return *response, nil
+}
+
+func (c *Client) Notify(nodeRep struct{ id int64; address string }, receiverAddress string)  grpc_api.Empty{
+	nc, conn := grpcClient(receiverAddress)
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	response, err := nc.Notify(ctx, &grpc_api.NotifyRequest{endpoint: nodeRep.address, id: nodeRep.id})
+
+	if err != nil {
+		handleErr(err)
+	}
+
+	return response
+}
+
+func (c *Client) Predecessor(address string) *grpc_api.PredecessorResponse{
 	nc, conn := grpcClient(address)
 	defer conn.Close()
 
@@ -28,7 +61,7 @@ func (c *Client) Predecessor(address string, key int64) *grpc_api.PredecessorRes
 	return response
 }
 
-func (c *Client) Successor(address string, key int64) *grpc_api.SuccessorResponse{
+func (c *Client) Successor(address string) *grpc_api.SuccessorResponse{
 	nc, conn := grpcClient(address)
 	defer conn.Close()
 

@@ -14,6 +14,7 @@ service DHTNode {
   rpc Delete (DeleteRequest) returns (Empty) {}
   rpc HandleChurn (HandleChurnRequest) returns (HandleChurnResponse) {}
   rpc SyncData (SyncDataRequest) returns (SyncDataResponse) {}
+  rpc Notify (NotifyRequest) returns (Empty) {}
 }
 
 message Empty {
@@ -86,4 +87,9 @@ message SaveRequest {
 
 message DeleteRequest {
     int64 key = 1;
+}
+
+message NotifyRequest {
+    string endpoint = 1
+    int64 id = 2;
 }

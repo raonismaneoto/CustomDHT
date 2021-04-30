@@ -14,20 +14,57 @@ type Node struct {
 	address string
 	storage map[int64][]byte
 	predecessor struct {id int64; address string}
+	nSucc struct {id int64; address string}
+	m int
 }
 
 func (n *Node) Start(partner *Node, m int) {
 	n.Join(partner, m)
 
 	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		for {
+			select {
+			case <-ticker.C:
+				n.checkSucc()
+			}
+		}
+	}()
+
+	go func() {
 		ticker := time.NewTicker(10 * time.Second)
 		for {
 			select {
 			case <-ticker.C:
-				n.stabilize()
+				n.stabilize(m)
 			}
 		}
 	}()
+}
+
+func (n *Node) checkSucc() {
+	client := &api.Client{}
+	_, err := client.Ping(n.fingerTable[0].address)
+
+	if err != nil {
+		_, err := client.HandleNewPredecessor(n.nSucc.address, struct {id int64; address string} {id: n.id, address: n.address})
+
+		if err != nil {}
+
+		n.fingerTable[0] = struct {
+			id      int64
+			address string
+		}{id: n.nSucc.id, address: n.nSucc.address }
+
+		nSucc := client.Successor(n.nSucc.address)
+
+		n.nSucc = struct {
+			id      int64
+			address string
+		}{id: nSucc.Id, address: n.address}
+
+		n.syncKeys()
+	}
 }
 
 func (n *Node) Join(partner *Node, m int) {
@@ -36,10 +73,10 @@ func (n *Node) Join(partner *Node, m int) {
 	n.startFingerTable(partner, m, client)
 	// notify other nodes to update their predecessors and finger table
 	nodeRepresentation := struct {id int64; address string} {id: n.id, address: n.address}
-	client.Notify(nodeRepresentation, n.fingerTable[0])
-	client.Notify(nodeRepresentation, n.predecessor)
+	client.HandleNewSuccessor(nodeRepresentation, n.fingerTable[0].address)
+	client.HandleNewPredecessor(nodeRepresentation, n.predecessor.address)
 	// get the data
-	client
+	n.syncKeys()
 }
 
 func (n *Node) Leave() {
@@ -47,7 +84,8 @@ func (n *Node) Leave() {
 }
 
 func (n *Node) Save(key int64, value []byte) {
-	if n.isKeyInRange(key) {
+	if n.mustKeyBeInNode(key) {
+		// if the key already exists it must be updated in the replication nodes
 		n.storage[key] = value
 		return
 	}
@@ -56,11 +94,12 @@ func (n *Node) Save(key int64, value []byte) {
 }
 
 func (n *Node) Delete(key int64) {
+	// delete in the replication nodes
 	delete(n.storage, key)
 }
 
 func (n *Node) Query(key int64) grpc_api.QueryResponse{
-	if n.isKeyInRange(key) {
+	if n.mustKeyBeInNode(key) {
 		data, ok := n.storage[key]
 
 		if !ok {
@@ -79,23 +118,36 @@ func (n *Node) Query(key int64) grpc_api.QueryResponse{
 	}
 
 	var aimingNode struct {id int64; address string}
-	for _, finger := range n.fingerTable {
-		if finger.id > key {
-			break
+	if n.id > key {
+		//take the smallest distance node
+		smallestDistance := int64(math.Pow(2, float64(n.m))) + 1000
+		for _, finger := range n.fingerTable {
+			currentDistance := distance(finger.id, key, n.m)
+			if currentDistance < smallestDistance {
+				smallestDistance = currentDistance
+				aimingNode = finger
+			}
+
 		}
-		aimingNode = finger
+	} else {
+		for _, finger := range n.fingerTable {
+			aimingNode = finger
+			if finger.id > key {
+				break
+			}
+		}
 	}
 
 	client := api.Client{}
 	return *client.Query(aimingNode.address, key)
 }
 
-func (n *Node) HandleNotification() {
-
-}
-
-func (n *Node) HandleChurn() {
-
+func distance(i int64, j int64, m int) int64 {
+	if j == i { return 0 }
+	if j > i {
+		return j - i
+	}
+	return int64(math.Pow(2, float64(m))) - i + j
 }
 
 func (n *Node) HandleNewSuccessor() {
@@ -114,8 +166,14 @@ func (n *Node) Predecessor() {
 
 }
 
-func (n *Node) stabilize() {
-	// here we want to check for each entry in the finger table
+func (n *Node) stabilize(m int) {
+	for i := 1; i < m; i++ {
+		currNodeInfo := n.Query((n.id + int64(math.Pow(2, float64(i-1))))%int64(math.Pow(2, float64(m))))
+		n.fingerTable[i] = struct {
+			id      int64
+			address string
+		}{id: currNodeInfo.ResponsibleNodeId, address:currNodeInfo.ResponsibleNodeEndpoint }
+	}
 }
 
 func (n *Node) startFingerTable(partner *Node, m int, client api.Client) {
@@ -126,8 +184,14 @@ func (n *Node) startFingerTable(partner *Node, m int, client api.Client) {
 		address string
 	}{id: succInfo.ResponsibleNodeId, address:succInfo.ResponsibleNodeEndpoint }
 
+	nSuccInfo := client.Successor(n.fingerTable[0].address)
+	n.nSucc = struct {
+		id int64
+		address string
+	}{id: nSuccInfo.Id, address: nSuccInfo.Endpoint}
+
 	//set predecessor before other entries of the finger table because it is needed in the query func
-	predecessor := client.Predecessor(n.fingerTable[0].address, n.fingerTable[0].id)
+	predecessor := client.Predecessor(n.fingerTable[0].address)
 	n.predecessor = struct {
 		id      int64
 		address string
@@ -142,7 +206,33 @@ func (n *Node) startFingerTable(partner *Node, m int, client api.Client) {
 	}
 }
 
-func (n *Node) isKeyInRange(key int64) bool{
+func (n *Node) mustKeyBeInNode(key int64) bool{
 	return n.predecessor.id == 0 || (key >= n.predecessor.id && key < n.id)
 }
 
+func (n *Node) keysRange() (int64, int64) {
+	client := &api.Client{}
+	predOfPred := client.Predecessor(n.predecessor.address)
+	start := (n.predecessor.id - predOfPred.Id)/2 + predOfPred.Id
+	end := (n.nSucc.id - n.fingerTable[0].id)/2 + n.fingerTable[0].id
+	return start, end
+}
+
+func (n *Node) syncKey(address string, key int64) {
+	client := api.Client{}
+	response := client.Query(address, key)
+	if response.Data != nil && len(response.Data) > 0 {
+		n.storage[key] = response.Data
+	}
+}
+
+func (n *Node) syncKeys() {
+	start, end := n.keysRange()
+	for i := start; i <= end; i++ {
+		if i < n.id {
+			n.syncKey(n.predecessor.address, i)
+		} else {
+			n.syncKey(n.fingerTable[0].address, i)
+		}
+	}
+}
