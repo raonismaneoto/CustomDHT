@@ -29,14 +29,32 @@ func (c *Client) Ping(address string) (grpc_api.Empty, error){
 	return *response, nil
 }
 
-func (c *Client) Notify(nodeRep struct{ id int64; address string }, receiverAddress string)  grpc_api.Empty{
+
+
+func (c *Client) HandleNewSuccessor(receiverAddress string, newSucc struct {id int64; address string}) (*grpc_api.HandleNewSuccessorResponse){
 	nc, conn := grpcClient(receiverAddress)
 	defer conn.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	response, err := nc.Notify(ctx, &grpc_api.NotifyRequest{endpoint: nodeRep.address, id: nodeRep.id})
+	response, err := nc.HandleNewSuccessor(ctx, &grpc_api.HandleNewSuccessorRequest{Endpoint: newSucc.address, Id: newSucc.id})
+
+	if err != nil {
+		handleErr(err)
+	}
+
+	return response
+}
+
+func (c *Client) HandleNewPredecessor(receiverAddress string, newPred struct {id int64; address string}) (*grpc_api.HandleNewPredecessorResponse){
+	nc, conn := grpcClient(receiverAddress)
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	response, err := nc.HandleNewPredecessor(ctx, &grpc_api.HandleNewPredecessorRequest{Endpoint: newPred.address, Id: newPred.id})
 
 	if err != nil {
 		handleErr(err)

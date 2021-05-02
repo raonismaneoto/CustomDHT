@@ -12,9 +12,7 @@ service DHTNode {
   rpc Query (QueryRequest) returns (QueryResponse) {}
   rpc Save (SaveRequest) returns (Empty) {}
   rpc Delete (DeleteRequest) returns (Empty) {}
-  rpc HandleChurn (HandleChurnRequest) returns (HandleChurnResponse) {}
   rpc SyncData (SyncDataRequest) returns (SyncDataResponse) {}
-  rpc Notify (NotifyRequest) returns (Empty) {}
 }
 
 message Empty {
@@ -37,7 +35,7 @@ message HandleNewPredecessorRequest {
 }
 
 message HandleNewPredecessorResponse {
-    bytes data = 3;
+    bool ok = 1;
 }
 
 message HandleNewSuccessorRequest {
@@ -46,8 +44,7 @@ message HandleNewSuccessorRequest {
 }
 
 message HandleNewSuccessorResponse {
-    int64 id = 1;
-    string endpoint = 2;
+    bool ok = 1;
 }
 
 message QueryRequest {
@@ -58,18 +55,6 @@ message QueryResponse {
     bytes data = 1;
     int64 responsibleNodeId = 2;
     string responsibleNodeEndpoint = 3;
-}
-
-message HandleChurnRequest {
-    int64 churningNodeId = 1;
-    string churningNodeEndpoint = 2;
-}
-
-message HandleChurnResponse {
-    int64 successorId = 1;
-    string successorEndpoint = 2;
-    int64 predecessorId = 3;
-    string predecessorEndpoint = 4;
 }
 
 message SyncDataRequest {
@@ -87,9 +72,4 @@ message SaveRequest {
 
 message DeleteRequest {
     int64 key = 1;
-}
-
-message NotifyRequest {
-    string endpoint = 1
-    int64 id = 2;
 }

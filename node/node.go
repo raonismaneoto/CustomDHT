@@ -40,6 +40,21 @@ func (n *Node) Start(partner *Node, m int) {
 			}
 		}
 	}()
+
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		for {
+			select {
+			case <-ticker.C:
+				n.syncReplicatedKeys()
+			}
+		}
+	}()
+}
+
+func (n *Node) syncReplicatedKeys() {
+	n.syncPredKeys()
+	n.syncSuccKeys()
 }
 
 func (n *Node) checkSucc() {
@@ -47,9 +62,11 @@ func (n *Node) checkSucc() {
 	_, err := client.Ping(n.fingerTable[0].address)
 
 	if err != nil {
-		_, err := client.HandleNewPredecessor(n.nSucc.address, struct {id int64; address string} {id: n.id, address: n.address})
+		response := client.HandleNewPredecessor(n.nSucc.address, struct {id int64; address string} {id: n.id, address: n.address})
 
-		if err != nil {}
+		if ! response.ok {
+			panic("")
+		}
 
 		n.fingerTable[0] = struct {
 			id      int64
@@ -73,19 +90,16 @@ func (n *Node) Join(partner *Node, m int) {
 	n.startFingerTable(partner, m, client)
 	// notify other nodes to update their predecessors and finger table
 	nodeRepresentation := struct {id int64; address string} {id: n.id, address: n.address}
-	client.HandleNewSuccessor(nodeRepresentation, n.fingerTable[0].address)
-	client.HandleNewPredecessor(nodeRepresentation, n.predecessor.address)
+	client.HandleNewSuccessor(n.fingerTable[0].address, nodeRepresentation)
+	client.HandleNewPredecessor(n.predecessor.address, nodeRepresentation)
 	// get the data
 	n.syncKeys()
 }
 
-func (n *Node) Leave() {
-
-}
-
 func (n *Node) Save(key int64, value []byte) {
 	if n.mustKeyBeInNode(key) {
-		// if the key already exists it must be updated in the replication nodes
+		// if the key already exists it must be updated in the replication nodes asynchronously (maybe not here, but in a periodic func)
+		// this periodic func can be optimized by creating hashing for the data and its key to check if it has changed. Only the changed keys will be really updated
 		n.storage[key] = value
 		return
 	}
@@ -94,7 +108,6 @@ func (n *Node) Save(key int64, value []byte) {
 }
 
 func (n *Node) Delete(key int64) {
-	// delete in the replication nodes
 	delete(n.storage, key)
 }
 
@@ -150,20 +163,45 @@ func distance(i int64, j int64, m int) int64 {
 	return int64(math.Pow(2, float64(m))) - i + j
 }
 
-func (n *Node) HandleNewSuccessor() {
+func (n *Node) HandleNewSuccessor(newSucc struct{id int64; address string}) bool {
+	client := &api.Client{}
+	if newSucc.id > n.fingerTable[0].id {
+		_, err := client.Ping(n.fingerTable[0].address)
+		if err == nil { return false }
+	}
 
+	n.fingerTable[0] = newSucc
+	nNSuccData := client.Successor(newSucc.address)
+	n.nSucc = struct {
+		id      int64
+		address string
+	}{id: nNSuccData.Id, address: nNSuccData.Endpoint}
+
+	go n.syncSuccKeys()
+
+	return true
 }
 
-func (n *Node) HandleNewPredecessor() {
+func (n *Node) HandleNewPredecessor(nPred struct{id int64; address string}) bool {
+	client := &api.Client{}
+	if nPred.id < n.predecessor.id {
+		_, err := client.Ping(n.predecessor.address)
+		if err == nil { return false }
+	}
 
+	n.predecessor = nPred
+	// check if this goroutine will die after this function return statement
+	go n.syncPredKeys()
+
+	return true
 }
 
-func (n *Node) Successor() {
-
+func (n *Node) Successor() struct{id int64; address string} {
+	return n.fingerTable[0]
 }
 
-func (n *Node) Predecessor() {
-
+func (n *Node) Predecessor() struct{id int64; address string} {
+	return n.predecessor
 }
 
 func (n *Node) stabilize(m int) {
@@ -234,5 +272,25 @@ func (n *Node) syncKeys() {
 		} else {
 			n.syncKey(n.fingerTable[0].address, i)
 		}
+	}
+}
+
+func (n *Node) syncSuccKeys() {
+	start := n.id
+	end := (n.nSucc.id - n.fingerTable[0].id)/2 + n.fingerTable[0].id
+
+	for i := start; i <= end; i++ {
+		n.syncKey(n.fingerTable[0].address, i)
+	}
+}
+
+func (n *Node) syncPredKeys() {
+	client := &api.Client{}
+	predOfPred := client.Predecessor(n.predecessor.address)
+	start := (n.predecessor.id - predOfPred.Id)/2 + predOfPred.Id
+	end := n.predecessor.id - 1
+
+	for i := start; i <= end; i++ {
+		n.syncKey(n.predecessor.address, i)
 	}
 }
