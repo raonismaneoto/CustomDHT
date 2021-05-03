@@ -16,9 +16,12 @@ type Node struct {
 	predecessor struct {id int64; address string}
 	nSucc struct {id int64; address string}
 	m int
+	replicationBuffer chan struct{key int64; data []byte}
 }
 
 func (n *Node) Start(partner *Node, m int) {
+	n.replicationBuffer = make(chan struct{key int64; data []byte}, 50)
+
 	n.Join(partner, m)
 
 	go func() {
@@ -41,20 +44,13 @@ func (n *Node) Start(partner *Node, m int) {
 		}
 	}()
 
-	go func() {
-		ticker := time.NewTicker(10 * time.Second)
-		for {
-			select {
-			case <-ticker.C:
-				n.syncReplicatedKeys()
-			}
-		}
-	}()
+	go n.syncReplicatedKeys()
 }
 
 func (n *Node) syncReplicatedKeys() {
-	n.syncPredKeys()
-	n.syncSuccKeys()
+	for msg := range n.replicationBuffer {
+		n.storage[msg.key] = msg.data
+	}
 }
 
 func (n *Node) checkSucc() {
@@ -96,19 +92,40 @@ func (n *Node) Join(partner *Node, m int) {
 	n.syncKeys()
 }
 
+func (n *Node) RepSave(message struct{key int64; data []byte}) {
+	go func() {
+		n.replicationBuffer <- message
+	}()
+}
+
 func (n *Node) Save(key int64, value []byte) {
+	client := api.Client{}
 	if n.mustKeyBeInNode(key) {
-		// if the key already exists it must be updated in the replication nodes asynchronously (maybe not here, but in a periodic func)
-		// this periodic func can be optimized by creating hashing for the data and its key to check if it has changed. Only the changed keys will be really updated
 		n.storage[key] = value
+		inflectionPoint := (n.id - n.predecessor.id)/2 + n.predecessor.id
+		if key >= inflectionPoint {
+			client.RepSave(n.fingerTable[0].address, struct {key int64; value []byte} {key: key, value: value})
+		} else {
+			client.RepSave(n.predecessor.address, struct {key int64; value []byte} {key: key, value: value})
+		}
 		return
 	}
 
 	// else the request must be passed to the responsible node
+	response := n.Query(key)
+	client.Save(response.ResponsibleNodeEndpoint, key, value)
 }
 
 func (n *Node) Delete(key int64) {
 	delete(n.storage, key)
+
+	client := api.Client{}
+	inflectionPoint := (n.id - n.predecessor.id)/2 + n.predecessor.id
+	if key >= inflectionPoint {
+		client.Delete(n.fingerTable[0].address, key)
+	} else {
+		client.Delete(n.predecessor.address, key)
+	}
 }
 
 func (n *Node) Query(key int64) grpc_api.QueryResponse{

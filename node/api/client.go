@@ -29,8 +29,6 @@ func (c *Client) Ping(address string) (grpc_api.Empty, error){
 	return *response, nil
 }
 
-
-
 func (c *Client) HandleNewSuccessor(receiverAddress string, newSucc struct {id int64; address string}) (*grpc_api.HandleNewSuccessorResponse){
 	nc, conn := grpcClient(receiverAddress)
 	defer conn.Close()
@@ -103,6 +101,54 @@ func (c *Client) Query(address string, key int64) *grpc_api.QueryResponse{
 	defer cancel()
 
 	response, err := nc.Query(ctx, &grpc_api.QueryRequest{Key: key})
+
+	if err != nil {
+		handleErr(err)
+	}
+
+	return response
+}
+
+func (c *Client) RepSave(address string, message struct {key int64; value []byte} ) *grpc_api.Empty{
+	nc, conn := grpcClient(address)
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	response, err := nc.RepSave(ctx, &grpc_api.RepSaveRequest{Key: message.key, Value: message.value})
+
+	if err != nil {
+		handleErr(err)
+	}
+
+	return response
+}
+
+func (c *Client) Save(address string, key int64, value []byte) *grpc_api.Empty{
+	nc, conn := grpcClient(address)
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	response, err := nc.Save(ctx, &grpc_api.SaveRequest{Key: key, Data: value})
+
+	if err != nil {
+		handleErr(err)
+	}
+
+	return response
+}
+
+func (c *Client) Delete(address string, key int64) *grpc_api.Empty{
+	nc, conn := grpcClient(address)
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	response, err := nc.Delete(ctx, &grpc_api.DeleteRequest{Key: key})
 
 	if err != nil {
 		handleErr(err)
