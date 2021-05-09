@@ -3,14 +3,16 @@ package api
 import (
 	"context"
 	"fmt"
+	"github.com/raonismaneoto/CustomDHT/helpers"
 	"github.com/raonismaneoto/CustomDHT/node"
 	"github.com/raonismaneoto/CustomDHT/node/api/grpc_api"
 	"google.golang.org/grpc"
 	"log"
 	"net"
+	"os"
+	"strconv"
 )
 
-// maybe a notify and a stabilize message are needed
 type server struct {
 	node *node.Node
 }
@@ -52,24 +54,41 @@ func (*server) Delete(ctx context.Context, request *grpc_api.DeleteRequest) (*gr
 	return &grpc_api.Empty{}, nil
 }
 
-func (*server) HandleChurn(ctx context.Context, request *grpc_api.HandleChurnRequest) (*grpc_api.HandleChurnResponse, error) {
-	return &grpc_api.HandleChurnResponse{}, nil
-}
-
-func (*server) SyncData(ctx context.Context, request *grpc_api.Empty) (*grpc_api.SyncDataResponse, error) {
-	return &grpc_api.SyncDataResponse{}, nil
+func (*server) RepSave(ctx context.Context, request *grpc_api.RepSaveRequest) (*grpc_api.Empty, error) {
+	return &grpc_api.Empty{}, nil
 }
 
 func main() {
-	address := "0.0.0.0:50051"
+	address := os.Args[1]
+	m, err := strconv.Atoi(os.Args[2])
+
+	partnerAddress := os.Args[3]
+	partnerId := int64(1)
+
+	if err != nil {
+		panic("m must be an integer")
+	}
+
+	nodeId := helpers.GetHash(address, m)
+
+	partner := &node.NodeRepresentation{Id: partnerId, Address: partnerAddress}
+
+	if partnerAddress == address {
+		nodeId = partnerId
+		partner = nil
+	}
+
+	s := grpc.NewServer()
+	nodeServer := &server{node: node.New(nodeId)}
+	grpc_api.RegisterDHTNodeServer(s, nodeServer)
+
+	nodeServer.node.Start(partner)
+
 	lis, err := net.Listen("tcp", address)
 	if err != nil {
 		log.Fatalf("Error %v", err)
 	}
 	fmt.Printf("Server is listening on %v ...", address)
-
-	s := grpc.NewServer()
-	grpc_api.RegisterDHTNodeServer(s, &server{node: &node.Node{}})
 
 	s.Serve(lis)
 }

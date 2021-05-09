@@ -12,7 +12,7 @@ service DHTNode {
   rpc Query (QueryRequest) returns (QueryResponse) {}
   rpc Save (SaveRequest) returns (Empty) {}
   rpc Delete (DeleteRequest) returns (Empty) {}
-  rpc SyncData (SyncDataRequest) returns (SyncDataResponse) {}
+  rpc RepSave (RepSaveRequest) returns (Empty) {}
 }
 
 message Empty {
@@ -57,12 +57,9 @@ message QueryResponse {
     string responsibleNodeEndpoint = 3;
 }
 
-message SyncDataRequest {
-    int64 id = 1;
-}
-
-message SyncDataResponse {
-    bytes data = 1;
+message RepSaveRequest {
+    int64 key = 1;
+    bytes value = 2;
 }
 
 message SaveRequest {

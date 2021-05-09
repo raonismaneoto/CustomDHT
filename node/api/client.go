@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"github.com/raonismaneoto/CustomDHT/node"
 	"log"
 	"time"
 	"google.golang.org/grpc"
@@ -29,14 +30,14 @@ func (c *Client) Ping(address string) (grpc_api.Empty, error){
 	return *response, nil
 }
 
-func (c *Client) HandleNewSuccessor(receiverAddress string, newSucc struct {id int64; address string}) (*grpc_api.HandleNewSuccessorResponse){
+func (c *Client) HandleNewSuccessor(receiverAddress string, newSucc node.NodeRepresentation) (*grpc_api.HandleNewSuccessorResponse){
 	nc, conn := grpcClient(receiverAddress)
 	defer conn.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	response, err := nc.HandleNewSuccessor(ctx, &grpc_api.HandleNewSuccessorRequest{Endpoint: newSucc.address, Id: newSucc.id})
+	response, err := nc.HandleNewSuccessor(ctx, &grpc_api.HandleNewSuccessorRequest{Endpoint: newSucc.Address, Id: newSucc.Id})
 
 	if err != nil {
 		handleErr(err)
@@ -45,14 +46,14 @@ func (c *Client) HandleNewSuccessor(receiverAddress string, newSucc struct {id i
 	return response
 }
 
-func (c *Client) HandleNewPredecessor(receiverAddress string, newPred struct {id int64; address string}) (*grpc_api.HandleNewPredecessorResponse){
+func (c *Client) HandleNewPredecessor(receiverAddress string, newPred node.NodeRepresentation) (*grpc_api.HandleNewPredecessorResponse){
 	nc, conn := grpcClient(receiverAddress)
 	defer conn.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	response, err := nc.HandleNewPredecessor(ctx, &grpc_api.HandleNewPredecessorRequest{Endpoint: newPred.address, Id: newPred.id})
+	response, err := nc.HandleNewPredecessor(ctx, &grpc_api.HandleNewPredecessorRequest{Endpoint: newPred.Address, Id: newPred.Id})
 
 	if err != nil {
 		handleErr(err)
@@ -109,14 +110,14 @@ func (c *Client) Query(address string, key int64) *grpc_api.QueryResponse{
 	return response
 }
 
-func (c *Client) RepSave(address string, message struct {key int64; value []byte} ) *grpc_api.Empty{
+func (c *Client) RepSave(address string, key int64, value []byte) *grpc_api.Empty{
 	nc, conn := grpcClient(address)
 	defer conn.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	response, err := nc.RepSave(ctx, &grpc_api.RepSaveRequest{Key: message.key, Value: message.value})
+	response, err := nc.RepSave(ctx, &grpc_api.RepSaveRequest{Key: key, Value: value})
 
 	if err != nil {
 		handleErr(err)
