@@ -3,9 +3,9 @@ package api
 import (
 	"context"
 	"fmt"
-	"github.com/raonismaneoto/CustomDHT/helpers"
+	"github.com/raonismaneoto/CustomDHT/commons/helpers"
 	"github.com/raonismaneoto/CustomDHT/node"
-	"github.com/raonismaneoto/CustomDHT/node/api/grpc_api"
+	"github.com/raonismaneoto/CustomDHT/commons/grpc_api"
 	"google.golang.org/grpc"
 	"log"
 	"net"

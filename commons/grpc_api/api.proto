@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package grpc_api;
-option go_package = "github.com/raonismaneoto/CustomDHT/node/api/grpc_api";
+option go_package = "github.com/raonismaneoto/CustomDHT/commons/grpc_api";
 
 service DHTNode {
   rpc Ping (Empty) returns (Empty) {}

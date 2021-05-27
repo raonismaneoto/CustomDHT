@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 	"google.golang.org/grpc"
-	"github.com/raonismaneoto/CustomDHT/node/api/grpc_api"
+	"github.com/raonismaneoto/CustomDHT/commons/grpc_api"
 )
 
 type Client struct {
