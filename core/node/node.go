@@ -130,7 +130,7 @@ func (n *Node) Delete(key int64) {
 	}
 }
 
-func (n *Node) Query(key int64) grpc_api.QueryResponse{
+func (n *Node) Query(key int64) grpc_api.QueryResponse {
 	if n.mustKeyBeInNode(key) {
 		data, ok := n.storage[key]
 
@@ -220,12 +220,20 @@ func (n *Node) HandleNewPredecessor(nPred NodeRepresentation) error {
 	return nil
 }
 
-func (n *Node) Successor() NodeRepresentation {
-	return n.fingerTable[0]
+func (n *Node) Successor() (*NodeRepresentation, error) {
+	if len(n.fingerTable) == 0 {
+		return nil, errors.New("There is no successor")
+	}
+
+	return &n.fingerTable[0], nil
 }
 
-func (n *Node) Predecessor() NodeRepresentation {
-	return n.predecessor
+func (n *Node) Predecessor() (NodeRepresentation, error) {
+	if n.predecessor.Address == "" {
+		return n.predecessor, errors.New("There is no predecessor")
+	}
+
+	return n.predecessor, nil
 }
 
 func (n *Node) stabilize() {
