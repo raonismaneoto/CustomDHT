@@ -2,8 +2,7 @@ package node
 
 import (
 	"errors"
-	"github.com/raonismaneoto/CustomDHT/node/api"
-	"github.com/raonismaneoto/CustomDHT/node/api/grpc_api"
+	"github.com/raonismaneoto/CustomDHT/commons/grpc_api"
 	"math"
 	"time"
 )
@@ -50,7 +49,7 @@ func (n *Node) checkSucc() {
 		return
 	}
 
-	client := &api.Client{}
+	client := &Client{}
 	_, err := client.Ping(n.fingerTable[0].Address)
 
 	if err != nil {
@@ -79,7 +78,7 @@ func (n *Node) Join(partner *NodeRepresentation) {
 		return
 	}
 
-	client := api.Client{}
+	client := Client{}
 	n.startFingerTable(partner, client)
 	// notify other nodes to update their predecessors and finger table
 	nodeRepresentation := NodeRepresentation {Id: n.id, Address: n.address}
@@ -102,7 +101,7 @@ func (n *Node) RepSave(message struct{key int64; data []byte}) {
 }
 
 func (n *Node) Save(key int64, value []byte) {
-	client := api.Client{}
+	client := Client{}
 	if n.mustKeyBeInNode(key) {
 		n.storage[key] = value
 		inflectionPoint := (n.id - n.predecessor.Id)/2 + n.predecessor.Id
@@ -122,7 +121,7 @@ func (n *Node) Save(key int64, value []byte) {
 func (n *Node) Delete(key int64) {
 	delete(n.storage, key)
 
-	client := api.Client{}
+	client := Client{}
 	inflectionPoint := (n.id - n.predecessor.Id)/2 + n.predecessor.Id
 	if key >= inflectionPoint {
 		client.Delete(n.fingerTable[0].Address, key)
@@ -172,7 +171,7 @@ func (n *Node) Query(key int64) grpc_api.QueryResponse{
 	}
 
 	if aimingNode != nil {
-		client := api.Client{}
+		client := Client{}
 		return *client.Query(aimingNode.Address, key)
 	}
 
@@ -192,7 +191,7 @@ func distance(i int64, j int64, m int) int64 {
 }
 
 func (n *Node) HandleNewSuccessor(newSucc NodeRepresentation) error {
-	client := &api.Client{}
+	client := &Client{}
 	if newSucc.Id > n.fingerTable[0].Id {
 		_, err := client.Ping(n.fingerTable[0].Address)
 		if err == nil { return errors.New("invalid successor") }
@@ -208,7 +207,7 @@ func (n *Node) HandleNewSuccessor(newSucc NodeRepresentation) error {
 }
 
 func (n *Node) HandleNewPredecessor(nPred NodeRepresentation) error {
-	client := &api.Client{}
+	client := &Client{}
 	if nPred.Id < n.predecessor.Id {
 		_, err := client.Ping(n.predecessor.Address)
 		if err == nil { return errors.New("invalid predecessor") }
@@ -239,7 +238,7 @@ func (n *Node) stabilize() {
 	}
 }
 
-func (n *Node) startFingerTable(partner *NodeRepresentation, client api.Client) {
+func (n *Node) startFingerTable(partner *NodeRepresentation, client Client) {
 	n.fingerTable = []NodeRepresentation{}
 	succInfo := client.Query(partner.Address, n.id)
 	n.fingerTable[0] = NodeRepresentation {Id: succInfo.ResponsibleNodeId, Address:succInfo.ResponsibleNodeEndpoint }
@@ -262,7 +261,7 @@ func (n *Node) mustKeyBeInNode(key int64) bool{
 }
 
 func (n *Node) keysRange() (int64, int64) {
-	client := &api.Client{}
+	client := &Client{}
 	predOfPred := client.Predecessor(n.predecessor.Address)
 	start := (n.predecessor.Id - predOfPred.Id)/2 + predOfPred.Id
 	end := (n.nSucc.Id - n.fingerTable[0].Id)/2 + n.fingerTable[0].Id
@@ -270,7 +269,7 @@ func (n *Node) keysRange() (int64, int64) {
 }
 
 func (n *Node) syncKey(address string, key int64) {
-	client := api.Client{}
+	client := Client{}
 	response := client.Query(address, key)
 	if response.Data != nil && len(response.Data) > 0 {
 		n.storage[key] = response.Data
@@ -298,7 +297,7 @@ func (n *Node) syncSuccKeys() {
 }
 
 func (n *Node) syncPredKeys() {
-	client := &api.Client{}
+	client := &Client{}
 	predOfPred := client.Predecessor(n.predecessor.Address)
 	start := (n.predecessor.Id - predOfPred.Id)/2 + predOfPred.Id
 	end := n.predecessor.Id - 1
