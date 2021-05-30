@@ -1,11 +1,11 @@
-package api
+package main
 
 import (
 	"context"
 	"fmt"
+	"github.com/raonismaneoto/CustomDHT/commons/grpc_api"
 	"github.com/raonismaneoto/CustomDHT/commons/helpers"
 	"github.com/raonismaneoto/CustomDHT/core/node"
-	"github.com/raonismaneoto/CustomDHT/commons/grpc_api"
 	"google.golang.org/grpc"
 	"log"
 	"net"
