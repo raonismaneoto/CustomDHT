@@ -2,7 +2,7 @@ package api
 
 import (
 	"context"
-	"github.com/raonismaneoto/CustomDHT/node"
+	"github.com/raonismaneoto/CustomDHT/core/node"
 	"log"
 	"time"
 	"google.golang.org/grpc"

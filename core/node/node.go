@@ -2,7 +2,7 @@ package node
 
 import (
 	"errors"
-	"github.com/raonismaneoto/CustomDHT/node/api"
+	"github.com/raonismaneoto/CustomDHT/core/node/api"
 	"github.com/raonismaneoto/CustomDHT/commons/grpc_api"
 	"math"
 	"time"
