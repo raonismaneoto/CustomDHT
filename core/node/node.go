@@ -3,6 +3,7 @@ package node
 import (
 	"errors"
 	"github.com/raonismaneoto/CustomDHT/commons/grpc_api"
+	"log"
 	"math"
 	"time"
 )
@@ -60,7 +61,8 @@ func (n *Node) checkSucc() {
 		response := client.HandleNewPredecessor(n.nSucc.Address, NodeRepresentation{Id: n.id, Address: n.address})
 
 		if ! response.Ok {
-			panic("")
+			log.Print("handle new predecessor failed for nSucc.")
+			return
 		}
 
 		n.fingerTable[0] = NodeRepresentation{Id: n.nSucc.Id, Address: n.nSucc.Address }
@@ -94,13 +96,16 @@ func (n *Node) Join(partner *NodeRepresentation) {
 	n.syncKeys()
 }
 
-func (n *Node) RepSave(message struct{key int64; data []byte}) {
+func (n *Node) RepSave(key int64, data []byte) {
 	go func() {
-		n.replicationBuffer <- message
+		n.replicationBuffer <- struct {
+			key  int64
+			data []byte
+		}{key: key, data: data}
 	}()
 }
 
-func (n *Node) Save(key int64, value []byte) {
+func (n *Node) Save(key int64, value []byte) error {
 	client := Client{}
 	if n.mustKeyBeInNode(key) {
 		n.storage[key] = value
@@ -110,12 +115,13 @@ func (n *Node) Save(key int64, value []byte) {
 		} else {
 			client.RepSave(n.predecessor.Address, key, value)
 		}
-		return
+		return nil
 	}
 
 	// else the request must be passed to the responsible node
 	response := n.Query(key)
-	client.Save(response.ResponsibleNodeEndpoint, key, value)
+	_, err := client.Save(response.ResponsibleNodeEndpoint, key, value)
+	return err
 }
 
 func (n *Node) Delete(key int64) {

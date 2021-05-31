@@ -74,15 +74,18 @@ func (s *server) Query(ctx context.Context, request *grpc_api.QueryRequest) (*gr
 	return &response, nil
 }
 
-func (*server) Save(ctx context.Context, request *grpc_api.SaveRequest) (*grpc_api.Empty, error) {
+func (s *server) Save(ctx context.Context, request *grpc_api.SaveRequest) (*grpc_api.Empty, error) {
+	err := s.node.Save(request.Key, request.Data)
+	return &grpc_api.Empty{}, err
+}
+
+func (s *server) Delete(ctx context.Context, request *grpc_api.DeleteRequest) (*grpc_api.Empty, error) {
+	s.node.Delete(request.Key)
 	return &grpc_api.Empty{}, nil
 }
 
-func (*server) Delete(ctx context.Context, request *grpc_api.DeleteRequest) (*grpc_api.Empty, error) {
-	return &grpc_api.Empty{}, nil
-}
-
-func (*server) RepSave(ctx context.Context, request *grpc_api.RepSaveRequest) (*grpc_api.Empty, error) {
+func (s *server) RepSave(ctx context.Context, request *grpc_api.RepSaveRequest) (*grpc_api.Empty, error) {
+	s.node.RepSave(request.Key, request.Value)
 	return &grpc_api.Empty{}, nil
 }
 

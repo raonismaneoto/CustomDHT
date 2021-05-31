@@ -125,7 +125,7 @@ func (c *Client) RepSave(address string, key int64, value []byte) *grpc_api.Empt
 	return response
 }
 
-func (c *Client) Save(address string, key int64, value []byte) *grpc_api.Empty{
+func (c *Client) Save(address string, key int64, value []byte) (*grpc_api.Empty, error){
 	nc, conn := grpcClient(address)
 	defer conn.Close()
 
@@ -136,9 +136,10 @@ func (c *Client) Save(address string, key int64, value []byte) *grpc_api.Empty{
 
 	if err != nil {
 		handleErr(err)
+		return nil, err
 	}
 
-	return response
+	return response, nil
 }
 
 func (c *Client) Delete(address string, key int64) *grpc_api.Empty{
