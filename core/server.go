@@ -91,15 +91,15 @@ func (s *server) RepSave(ctx context.Context, request *grpc_api.RepSaveRequest) 
 
 func main() {
 	// go run [nodeAddr] [m] [partnerAddr] [partnerId]
-	address := os.Args[1]
-	m, err := strconv.Atoi(os.Args[2])
+	address := os.Getenv("NODE_FULL_ADDR")
+	m, err := strconv.Atoi(os.Getenv("M"))
 
 	if err != nil {
 		panic("m must be an integer")
 	}
 
-	partnerAddress := os.Args[3]
-	partnerId, err := strconv.ParseInt(os.Args[4], 10, 64)
+	partnerAddress := os.Getenv("PARTNER_FULL_ADDR")
+	partnerId, err := strconv.ParseInt(os.Getenv("PARTNER_ID"), 10, 64)
 
 	if err != nil {
 		panic("partnerId must be an integer")

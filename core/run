@@ -1,0 +1,43 @@
+#!/bin/bash
+
+readonly ROOT_PATH=$GO_PATH/src/github.com/raonismaneoto/CustomDHT/
+readonly CORE_PATH=$GO_PATH/src/github.com/raonismaneoto/CustomDHT/core
+readonly CONTAINER_NAME=DHT-NODE-$RANDOM
+readonly IMAGE_NAME=dht-node
+readonly IMAGE_VERSION=latest
+readonly IMAGE=$IMAGE_NAME:$IMAGE_VERSION
+
+install_dependencies() {
+    sudo go get -v
+    sudo go install -v
+}
+
+build_solution() {
+    cd $CORE_PATH
+    sudo go build -o main
+    cd -
+}
+
+build_image() {
+    cd $CORE_PATH
+    sudo docker build --no-cache -f Dockerfile -t raonismaneoto/$IMAGE .
+}
+
+setup_container_image() {
+    sudo docker pull raonismaneoto/$IMAGE
+}
+
+start() {
+    sudo docker stop $CONTAINER_NAME
+    sudo docker rm $CONTAINER_NAME
+    sudo docker run --name $CONTAINER_NAME -idt --env-file $CORE_PATH/.env raonismaneoto/$IMAGE
+}
+
+main() {
+    cd $ROOT_PATH
+    [[ -n $1 ]] && [[ "$1" == "--build-image" ]] && install_dependencies && build_solution && build_image
+    [[ -z $1 ]] || [[ "$1" != "--build-image" ]] && setup_container_image
+    start
+}
+
+main $@

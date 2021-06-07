@@ -23,10 +23,10 @@ type HttpServer struct {
 
 // http api implementation
 func main() {
-	port := os.Args[1]
-	rootNodeAddress := os.Args[2]
-	rootNodeId, err := strconv.ParseInt(os.Args[3], 10, 64)
-	m, err := strconv.Atoi(os.Args[4])
+	port := os.Getenv("PORT")
+	rootNodeAddress := os.Getenv("ROOT_NODE_ADDR")
+	rootNodeId, err := strconv.ParseInt(os.Getenv("ROOT_NODE_ID"), 10, 64)
+	m, err := strconv.Atoi(os.Getenv("M"))
 
 	if err != nil {
 		panic("m must be an integer")
