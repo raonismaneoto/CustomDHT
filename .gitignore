@@ -1,4 +1,4 @@
-/node/api/grpc_api/api.pb.go
+./commons/grpc_api/api.pb.go
 .idea
 ./api/.env
 ./core/.env
