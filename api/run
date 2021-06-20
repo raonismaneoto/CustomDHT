@@ -6,6 +6,7 @@ readonly CONTAINER_NAME=DHT-API
 readonly IMAGE_NAME=dht-api
 readonly IMAGE_VERSION=latest
 readonly IMAGE=$IMAGE_NAME:$IMAGE_VERSION
+readonly PORT=$(grep ^PORT $API_PATH/.env | awk -F "=" '{print $2}')
 
 install_dependencies() {
     sudo go get -v
@@ -30,7 +31,7 @@ setup_container_image() {
 start() {
     sudo docker stop $CONTAINER_NAME
     sudo docker rm $CONTAINER_NAME
-    sudo docker run --name $CONTAINER_NAME -idt --env-file $API_PATH/.env raonismaneoto/$IMAGE
+    sudo docker run --name $CONTAINER_NAME -idt -p $PORT:$PORT --env-file $API_PATH/.env raonismaneoto/$IMAGE
 }
 
 main() {

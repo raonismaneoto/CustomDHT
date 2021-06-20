@@ -90,7 +90,6 @@ func (s *server) RepSave(ctx context.Context, request *grpc_api.RepSaveRequest) 
 }
 
 func main() {
-	// go run [nodeAddr] [m] [partnerAddr] [partnerId]
 	address := os.Getenv("NODE_FULL_ADDR")
 	m, err := strconv.Atoi(os.Getenv("M"))
 
