@@ -19,10 +19,12 @@ type server struct {
 }
 
 func (*server) Ping(ctx context.Context, request *grpc_api.Empty) (*grpc_api.Empty, error) {
+	log.Println("Ping call received")
 	return &grpc_api.Empty{}, nil
 }
 
 func (s *server) Successor(ctx context.Context, request *grpc_api.Empty) (*grpc_api.SuccessorResponse, error) {
+	log.Println("Successor call received")
 	response, err := s.node.Successor()
 
 	if err != nil {
@@ -39,6 +41,7 @@ func (s *server) Successor(ctx context.Context, request *grpc_api.Empty) (*grpc_
 }
 
 func (s *server) Predecessor(ctx context.Context, request *grpc_api.Empty) (*grpc_api.PredecessorResponse, error) {
+	log.Println("Predecessor call received")
 	response, err := s.node.Predecessor()
 
 	if err != nil {
@@ -54,17 +57,46 @@ func (s *server) Predecessor(ctx context.Context, request *grpc_api.Empty) (*grp
 	}, nil
 }
 
-func (*server) HandleNewPredecessor(ctx context.Context, request *grpc_api.HandleNewPredecessorRequest) (*grpc_api.HandleNewPredecessorResponse, error) {
-	var response *grpc_api.HandleNewPredecessorResponse
-	return response, nil
+func (s *server) HandleNewPredecessor(ctx context.Context, request *grpc_api.HandleNewPredecessorRequest) (*grpc_api.HandleNewPredecessorResponse, error) {
+	log.Println("HandleNewPredecessor call received. New predecessor id: " + string(request.Id))
+
+	err := s.node.HandleNewPredecessor(struct {
+		Id      int64
+		Address string
+	}{Id: request.Id, Address: request.Endpoint})
+
+	if err != nil {
+		return &grpc_api.HandleNewPredecessorResponse{
+			Ok: false,
+		}, err
+	}
+
+	return &grpc_api.HandleNewPredecessorResponse{
+		Ok: true,
+	}, nil
 }
 
-func (*server) HandleNewSuccessor(ctx context.Context, request *grpc_api.HandleNewSuccessorRequest) (*grpc_api.HandleNewSuccessorResponse, error) {
-	var response *grpc_api.HandleNewSuccessorResponse
-	return response, nil
+func (s *server) HandleNewSuccessor(ctx context.Context, request *grpc_api.HandleNewSuccessorRequest) (*grpc_api.HandleNewSuccessorResponse, error) {
+	log.Println("HandleNewSuccessor call received. New successor id: " + string(request.Id))
+
+	err := s.node.HandleNewSuccessor(struct {
+		Id      int64
+		Address string
+	}{Id: request.Id, Address: request.Endpoint})
+
+	if err != nil {
+		return &grpc_api.HandleNewSuccessorResponse{
+			Ok: false,
+		}, err
+	}
+
+	return &grpc_api.HandleNewSuccessorResponse{
+		Ok: true,
+	}, nil
 }
 
 func (s *server) Query(ctx context.Context, request *grpc_api.QueryRequest) (*grpc_api.QueryResponse, error) {
+	log.Println("Query call received. Key: " + string(request.Key))
 	response := s.node.Query(request.Key)
 
 	if response.ResponsibleNodeId == -1 {
@@ -75,21 +107,25 @@ func (s *server) Query(ctx context.Context, request *grpc_api.QueryRequest) (*gr
 }
 
 func (s *server) Save(ctx context.Context, request *grpc_api.SaveRequest) (*grpc_api.Empty, error) {
+	log.Println("Save call received. Key: " + string(request.Key))
 	err := s.node.Save(request.Key, request.Data)
 	return &grpc_api.Empty{}, err
 }
 
 func (s *server) Delete(ctx context.Context, request *grpc_api.DeleteRequest) (*grpc_api.Empty, error) {
+	log.Println("Delete call received. Key: " + string(request.Key))
 	s.node.Delete(request.Key)
 	return &grpc_api.Empty{}, nil
 }
 
 func (s *server) RepSave(ctx context.Context, request *grpc_api.RepSaveRequest) (*grpc_api.Empty, error) {
+	log.Println("RepSave call received. Key: " + string(request.Key))
 	s.node.RepSave(request.Key, request.Value)
 	return &grpc_api.Empty{}, nil
 }
 
 func main() {
+	setupLogging()
 	address := os.Getenv("NODE_FULL_ADDR")
 	m, err := strconv.Atoi(os.Getenv("M"))
 
@@ -126,5 +162,13 @@ func main() {
 	fmt.Printf("Server is listening on %v ...", address)
 
 	s.Serve(lis)
+}
+
+func setupLogging() {
+	file, err := os.Create("logs.txt")
+	if err != nil {
+		log.Fatal("unable to create log file.", err)
+	}
+	log.SetOutput(file)
 }
 

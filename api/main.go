@@ -23,6 +23,7 @@ type HttpServer struct {
 
 // http api implementation
 func main() {
+	setupLogging()
 	port := os.Getenv("PORT")
 	rootNodeAddress := os.Getenv("ROOT_NODE_ADDR")
 	rootNodeId, err := strconv.ParseInt(os.Getenv("ROOT_NODE_ID"), 10, 64)
@@ -48,6 +49,14 @@ func main() {
 	}
 }
 
+func setupLogging() {
+	file, err := os.Create("logs.txt")
+	if err != nil {
+		log.Fatal("unable to create log file.", err)
+	}
+	log.SetOutput(file)
+}
+
 func handler(httpServer HttpServer) *mux.Router {
 	router := mux.NewRouter()
 
@@ -65,6 +74,7 @@ func (s *HttpServer) save(w http.ResponseWriter, r *http.Request) {
 	key, kok := body["key"]
 	value, vok := body["value"]
 
+
 	if err != nil  || !kok || !vok{
 		log.Println("error when decoding body. " + err.Error())
 		w.Header().Set("Content-Type", "application/json")
@@ -72,6 +82,8 @@ func (s *HttpServer) save(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode("Wrong body format")
 		return
 	}
+
+	log.Println("Save request received. Key: " + fmt.Sprintf("%v", key))
 
 	Save(s.rootNodeAddress, helpers.GetHash(fmt.Sprintf("%v", key), s.m), []byte(fmt.Sprintf("%v", value)))
 
@@ -90,6 +102,8 @@ func (s *HttpServer) remove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Println("Remove request received. Key: " + fmt.Sprintf("%v", id))
+
 	Remove(s.rootNodeAddress, helpers.GetHash(id, s.m))
 
 	w.Header().Set("Content-Type", "application/json")
@@ -106,6 +120,8 @@ func (s *HttpServer) retrieve(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode("Missing data id on request path")
 		return
 	}
+
+	log.Println("Retrieval request received. Key: " + fmt.Sprintf("%v", id))
 
 	response := Query(s.rootNodeAddress, helpers.GetHash(id, s.m))
 
