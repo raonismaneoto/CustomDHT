@@ -23,7 +23,7 @@ type HttpServer struct {
 
 // http api implementation
 func main() {
-	setupLogging()
+	helpers.SetupLogging()
 	port := os.Getenv("PORT")
 	rootNodeAddress := os.Getenv("ROOT_NODE_ADDR")
 	rootNodeId, err := strconv.ParseInt(os.Getenv("ROOT_NODE_ID"), 10, 64)
@@ -47,14 +47,6 @@ func main() {
 	if err := server.ListenAndServe(); err != nil {
 		log.Println("error to start server with error: " + err.Error())
 	}
-}
-
-func setupLogging() {
-	file, err := os.Create("logs.txt")
-	if err != nil {
-		log.Fatal("unable to create log file.", err)
-	}
-	log.SetOutput(file)
 }
 
 func handler(httpServer HttpServer) *mux.Router {

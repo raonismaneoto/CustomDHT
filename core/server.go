@@ -100,6 +100,7 @@ func (s *server) Query(ctx context.Context, request *grpc_api.QueryRequest) (*gr
 	response := s.node.Query(request.Key)
 
 	if response.ResponsibleNodeId == -1 {
+		log.Println("Key: " + string(request.Key) + " not found.")
 		return &response, errors.New("Key not found")
 	}
 
@@ -125,7 +126,7 @@ func (s *server) RepSave(ctx context.Context, request *grpc_api.RepSaveRequest) 
 }
 
 func main() {
-	setupLogging()
+	helpers.SetupLogging()
 	address := os.Getenv("NODE_FULL_ADDR")
 	m, err := strconv.Atoi(os.Getenv("M"))
 
@@ -162,13 +163,5 @@ func main() {
 	fmt.Printf("Server is listening on %v ...", address)
 
 	s.Serve(lis)
-}
-
-func setupLogging() {
-	file, err := os.Create("logs.txt")
-	if err != nil {
-		log.Fatal("unable to create log file.", err)
-	}
-	log.SetOutput(file)
 }
 

@@ -3,7 +3,9 @@ package helpers
 import (
 	"crypto/sha1"
 	"fmt"
+	"log"
 	"math"
+	"os"
 )
 
 func GetHash(key string, m int) int64 {
@@ -20,4 +22,12 @@ func GetHash(key string, m int) int64 {
 	}
 
 	return sum%int64(math.Pow(2.0, float64(m)))
+}
+
+func SetupLogging() {
+	file, err := os.Create("logs.txt")
+	if err != nil {
+		log.Fatal("unable to create log file.", err)
+	}
+	log.SetOutput(file)
 }

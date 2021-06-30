@@ -29,14 +29,17 @@ func New(id int64) *Node{
 }
 
 func (n *Node) Start(partner *NodeRepresentation) {
+	log.Println("Starting node: " + string(n.id))
 	n.replicationBuffer = make(chan struct{key int64; data []byte}, 50)
 
 	n.Join(partner)
 
-	periodicInvocation(n.checkSucc)
-	periodicInvocation(n.stabilize)
+	periodicInvocation(n.checkSucc,5)
+	periodicInvocation(n.stabilize, 5)
 
 	go n.syncReplicatedKeys()
+
+	periodicInvocation(n.logStoredKeys, 60)
 }
 
 func (n *Node) syncReplicatedKeys() {
@@ -58,16 +61,19 @@ func (n *Node) checkSucc() {
 			return
 		}
 
-		response := client.HandleNewPredecessor(n.nSucc.Address, NodeRepresentation{Id: n.id, Address: n.address})
+		response, err:= client.HandleNewPredecessor(n.nSucc.Address, NodeRepresentation{Id: n.id, Address: n.address})
 
-		if ! response.Ok {
-			log.Print("handle new predecessor failed for nSucc.")
+		if ! response.Ok || err != nil{
+			log.Println("handle new predecessor failed for nSucc.")
 			return
 		}
 
 		n.fingerTable[0] = NodeRepresentation{Id: n.nSucc.Id, Address: n.nSucc.Address }
 
-		nSucc := client.Successor(n.nSucc.Address)
+		nSucc, err := client.Successor(n.nSucc.Address)
+		if err != nil {
+			log.Println("unable to reach nSucc in checkSucc. Err: " + err.Error())
+		}
 
 		n.nSucc = NodeRepresentation {Id: nSucc.Id, Address: n.address}
 
@@ -84,12 +90,12 @@ func (n *Node) Join(partner *NodeRepresentation) {
 	n.startFingerTable(partner, client)
 	// notify other nodes to update their predecessors and finger table
 	nodeRepresentation := NodeRepresentation {Id: n.id, Address: n.address}
-	newPredResponse := client.HandleNewPredecessor(n.fingerTable[0].Address, nodeRepresentation)
-	if !newPredResponse.Ok {
+	newPredResponse, err := client.HandleNewPredecessor(n.fingerTable[0].Address, nodeRepresentation)
+	if !newPredResponse.Ok || err != nil {
 		panic("Successor did not accept new predecessor")
 	}
-	newSuccResponse := client.HandleNewSuccessor(n.predecessor.Address, nodeRepresentation)
-	if !newSuccResponse.Ok {
+	newSuccResponse, err:= client.HandleNewSuccessor(n.predecessor.Address, nodeRepresentation)
+	if !newSuccResponse.Ok || err != nil {
 		panic("Predecessor did not accept new sucessor")
 	}
 	// get the data
@@ -141,6 +147,7 @@ func (n *Node) Query(key int64) grpc_api.QueryResponse {
 		data, ok := n.storage[key]
 
 		if !ok {
+			log.Println("Key" + string(key) + " not found.")
 			return grpc_api.QueryResponse{
 				Data: []byte{},
 				ResponsibleNodeEndpoint: n.address,
@@ -181,6 +188,8 @@ func (n *Node) Query(key int64) grpc_api.QueryResponse {
 		return *client.Query(aimingNode.Address, key)
 	}
 
+	log.Println("Key" + string(key) + " not found.")
+
 	return grpc_api.QueryResponse{
 		Data: []byte{},
 		ResponsibleNodeEndpoint: "",
@@ -204,8 +213,12 @@ func (n *Node) HandleNewSuccessor(newSucc NodeRepresentation) error {
 	}
 
 	n.fingerTable[0] = newSucc
-	nNSuccData := client.Successor(newSucc.Address)
-	n.nSucc = NodeRepresentation {Id: nNSuccData.Id, Address: nNSuccData.Endpoint}
+	nNSuccData, err := client.Successor(newSucc.Address)
+	if err != nil {
+		log.Println("unable to retrieve nNSucc info at handleNewSuccessor. Err: " + err.Error())
+	} else {
+		n.nSucc = NodeRepresentation {Id: nNSuccData.Id, Address: nNSuccData.Endpoint}
+	}
 
 	go n.syncSuccKeys()
 
@@ -255,14 +268,22 @@ func (n *Node) stabilize() {
 func (n *Node) startFingerTable(partner *NodeRepresentation, client Client) {
 	n.fingerTable = []NodeRepresentation{}
 	succInfo := client.Query(partner.Address, n.id)
-	n.fingerTable[0] = NodeRepresentation {Id: succInfo.ResponsibleNodeId, Address:succInfo.ResponsibleNodeEndpoint }
+	succ := NodeRepresentation {Id: succInfo.ResponsibleNodeId, Address:succInfo.ResponsibleNodeEndpoint }
+	n.fingerTable[0] = succ
 
-	nSuccInfo := client.Successor(n.fingerTable[0].Address)
-	n.nSucc = NodeRepresentation {Id: nSuccInfo.Id, Address: nSuccInfo.Endpoint}
-
-	//set predecessor before other entries of the finger table because it is needed in the query func
-	predecessor := client.Predecessor(n.fingerTable[0].Address)
-	n.predecessor = NodeRepresentation {Id: predecessor.Id, Address: predecessor.Endpoint}
+	nSuccInfo, err := client.Successor(n.fingerTable[0].Address)
+	if err != nil {
+		//if the partner does not have successor it does not have predecessor either
+		log.Println("Unable to find nsucc on finger table startup. Err: %v", err)
+		n.predecessor = succ
+	} else {
+		n.nSucc = NodeRepresentation {Id: nSuccInfo.Id, Address: nSuccInfo.Endpoint}
+		predecessor, err := client.Predecessor(n.fingerTable[0].Address)
+		if err != nil {
+			log.Println(err.Error())
+		}
+		n.predecessor = NodeRepresentation {Id: predecessor.Id, Address: predecessor.Endpoint}
+	}
 
 	for i := 1; i < n.m; i++ {
 		currNodeInfo := n.Query((n.id + int64(math.Pow(2, float64(i-1))))%int64(math.Pow(2, float64(n.m))))
@@ -276,7 +297,7 @@ func (n *Node) mustKeyBeInNode(key int64) bool{
 
 func (n *Node) keysRange() (int64, int64) {
 	client := &Client{}
-	predOfPred := client.Predecessor(n.predecessor.Address)
+	predOfPred, _ := client.Predecessor(n.predecessor.Address)
 	start := (n.predecessor.Id - predOfPred.Id)/2 + predOfPred.Id
 	end := (n.nSucc.Id - n.fingerTable[0].Id)/2 + n.fingerTable[0].Id
 	return start, end
@@ -312,7 +333,7 @@ func (n *Node) syncSuccKeys() {
 
 func (n *Node) syncPredKeys() {
 	client := &Client{}
-	predOfPred := client.Predecessor(n.predecessor.Address)
+	predOfPred, _ := client.Predecessor(n.predecessor.Address)
 	start := (n.predecessor.Id - predOfPred.Id)/2 + predOfPred.Id
 	end := n.predecessor.Id - 1
 
@@ -321,9 +342,9 @@ func (n *Node) syncPredKeys() {
 	}
 }
 
-func periodicInvocation(f func()) {
+func periodicInvocation(f func(), secs int) {
 	go func() {
-		ticker := time.NewTicker(5 * time.Second)
+		ticker := time.NewTicker(time.Duration(secs) * time.Second)
 		for {
 			select {
 			case <-ticker.C:
@@ -331,4 +352,12 @@ func periodicInvocation(f func()) {
 			}
 		}
 	}()
+}
+
+func (n *Node) logStoredKeys() {
+	msg := "Stored keys: "
+	for k, _ := range n.storage {
+		msg += "" + string(k) + " "
+	}
+	log.Println(msg)
 }
