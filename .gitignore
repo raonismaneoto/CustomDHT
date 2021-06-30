@@ -2,3 +2,7 @@
 .idea
 ./api/.env
 ./core/.env
+./core/main
+./api/main
+./api/logs.txt
+./core/logs.txt
