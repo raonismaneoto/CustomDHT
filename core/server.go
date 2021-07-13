@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/raonismaneoto/CustomDHT/commons/grpc_api"
 	"github.com/raonismaneoto/CustomDHT/commons/helpers"
 	"github.com/raonismaneoto/CustomDHT/core/node"
@@ -30,7 +29,7 @@ func (s *server) Successor(ctx context.Context, request *grpc_api.Empty) (*grpc_
 	if err != nil {
 		return &grpc_api.SuccessorResponse{
 			Id:       -1,
-			Endpoint: response.Address,
+			Endpoint: "",
 		}, err
 	}
 
@@ -126,8 +125,8 @@ func (s *server) RepSave(ctx context.Context, request *grpc_api.RepSaveRequest) 
 }
 
 func main() {
-	helpers.SetupLogging()
-	address := os.Getenv("NODE_FULL_ADDR")
+	port := os.Getenv("NODE_PORT")
+	address := helpers.GetOutboundIP() + ":" + port
 	m, err := strconv.Atoi(os.Getenv("M"))
 
 	if err != nil {
@@ -150,18 +149,24 @@ func main() {
 		partner = nil
 	}
 
-	s := grpc.NewServer()
-	nodeServer := &server{node: node.New(nodeId)}
-	grpc_api.RegisterDHTNodeServer(s, nodeServer)
+	helpers.SetupLogging(nodeId)
 
-	nodeServer.node.Start(partner)
-
-	lis, err := net.Listen("tcp", address)
+	lis, err := net.Listen("tcp", ":"+port)
 	if err != nil {
 		log.Fatalf("Error %v", err)
 	}
-	fmt.Printf("Server is listening on %v ...", address)
 
-	s.Serve(lis)
+	s := grpc.NewServer()
+	nodeServer := &server{node: node.New(nodeId, address, m)}
+	grpc_api.RegisterDHTNodeServer(s, nodeServer)
+
+	log.Println("server listening at %v", lis.Addr())
+
+	nodeServer.node.Start(partner)
+
+	log.Println("going to start grpc server listener")
+	if err := s.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
+	}
 }
 

@@ -23,7 +23,7 @@ type HttpServer struct {
 
 // http api implementation
 func main() {
-	helpers.SetupLogging()
+	helpers.SetupLogging(0)
 	port := os.Getenv("PORT")
 	rootNodeAddress := os.Getenv("ROOT_NODE_ADDR")
 	rootNodeId, err := strconv.ParseInt(os.Getenv("ROOT_NODE_ID"), 10, 64)
@@ -52,11 +52,18 @@ func main() {
 func handler(httpServer HttpServer) *mux.Router {
 	router := mux.NewRouter()
 
+	router.HandleFunc("/api/version", httpServer.version).Methods(http.MethodGet)
 	router.HandleFunc("/api/dht", httpServer.save).Methods(http.MethodPut)
 	router.HandleFunc("/api/dht/{id}", httpServer.remove).Methods(http.MethodDelete)
 	router.HandleFunc("/api/dht/{id}", httpServer.retrieve).Methods(http.MethodGet)
 
 	return router
+}
+
+func (s *HttpServer) version(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(&map[string]string{"version": "v1"})
 }
 
 func (s *HttpServer) save(w http.ResponseWriter, r *http.Request) {
@@ -131,7 +138,7 @@ func Query(address string, key int64) *grpc_api.QueryResponse{
 	nc := grpc_api.NewDHTNodeClient(conn)
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
 	defer cancel()
 
 	response, err := nc.Query(ctx, &grpc_api.QueryRequest{Key: key})
@@ -149,6 +156,8 @@ func Query(address string, key int64) *grpc_api.QueryResponse{
 }
 
 func Save(address string, key int64, value []byte) *grpc_api.Empty{
+	log.Println("connecting to the rpc server, rootNodeAddress:")
+	log.Println(address)
 	conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
@@ -157,9 +166,9 @@ func Save(address string, key int64, value []byte) *grpc_api.Empty{
 	nc := grpc_api.NewDHTNodeClient(conn)
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
 	defer cancel()
-
+	log.Println("calling save rpc function")
 	_, err = nc.Save(ctx, &grpc_api.SaveRequest{Key: key, Data: value})
 
 	if err != nil {
@@ -178,7 +187,7 @@ func Remove(address string, key int64) *grpc_api.Empty{
 	nc := grpc_api.NewDHTNodeClient(conn)
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*60)
 	defer cancel()
 
 	_, err = nc.Delete(ctx, &grpc_api.DeleteRequest{Key: key})

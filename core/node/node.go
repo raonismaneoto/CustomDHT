@@ -24,14 +24,25 @@ type Node struct {
 	replicationBuffer chan struct{key int64; data []byte}
 }
 
-func New(id int64) *Node{
-	return &Node{id: id}
+func New(id int64, address string, m int) *Node{
+	return &Node{id: id, address: address, m: m}
 }
 
 func (n *Node) Start(partner *NodeRepresentation) {
-	log.Println("Starting node: " + string(n.id))
+	log.Println("Starting node: %v", n.id)
+	log.Println("creating replicationBuffer")
 	n.replicationBuffer = make(chan struct{key int64; data []byte}, 50)
-
+	log.Println("going to call Join")
+	n.fingerTable = make([]NodeRepresentation, n.m, n.m)
+	n.storage = make(map[int64][]byte)
+	n.predecessor = NodeRepresentation{
+		Id:      0,
+		Address: "",
+	}
+	n.nSucc = NodeRepresentation{
+		Id:      0,
+		Address: "",
+	}
 	n.Join(partner)
 
 	periodicInvocation(n.checkSucc,5)
@@ -49,7 +60,7 @@ func (n *Node) syncReplicatedKeys() {
 }
 
 func (n *Node) checkSucc() {
-	if len(n.fingerTable) == 0 {
+	if n.fingerTable == nil || len(n.fingerTable) == 0 {
 		return
 	}
 
@@ -63,7 +74,7 @@ func (n *Node) checkSucc() {
 
 		response, err:= client.HandleNewPredecessor(n.nSucc.Address, NodeRepresentation{Id: n.id, Address: n.address})
 
-		if ! response.Ok || err != nil{
+		if err != nil || ! response.Ok{
 			log.Println("handle new predecessor failed for nSucc.")
 			return
 		}
@@ -87,15 +98,19 @@ func (n *Node) Join(partner *NodeRepresentation) {
 	}
 
 	client := Client{}
+	log.Println("Starting finger table")
 	n.startFingerTable(partner, client)
 	// notify other nodes to update their predecessors and finger table
+	log.Println("Starting join notifications")
 	nodeRepresentation := NodeRepresentation {Id: n.id, Address: n.address}
 	newPredResponse, err := client.HandleNewPredecessor(n.fingerTable[0].Address, nodeRepresentation)
-	if !newPredResponse.Ok || err != nil {
+	if err != nil || !newPredResponse.Ok {
+		log.Println("Successor did not accept new predecessor" + err.Error())
 		panic("Successor did not accept new predecessor")
 	}
 	newSuccResponse, err:= client.HandleNewSuccessor(n.predecessor.Address, nodeRepresentation)
-	if !newSuccResponse.Ok || err != nil {
+	if err != nil || !newSuccResponse.Ok {
+		log.Println("Predecessor did not accept new sucessor" + err.Error())
 		panic("Predecessor did not accept new sucessor")
 	}
 	// get the data
@@ -162,7 +177,11 @@ func (n *Node) Query(key int64) grpc_api.QueryResponse {
 		}
 	}
 
-	var aimingNode *NodeRepresentation
+	var aimingNode = NodeRepresentation{
+		Id:      0,
+		Address: "",
+	}
+
 	if n.id > key {
 		//take the smallest distance node
 		smallestDistance := int64(math.Pow(2, float64(n.m))) + 1000
@@ -170,20 +189,22 @@ func (n *Node) Query(key int64) grpc_api.QueryResponse {
 			currentDistance := distance(finger.Id, key, n.m)
 			if currentDistance < smallestDistance {
 				smallestDistance = currentDistance
-				aimingNode = &finger
+				aimingNode = finger
 			}
 
 		}
 	} else {
 		for _, finger := range n.fingerTable {
-			aimingNode = &finger
+			aimingNode = finger
 			if finger.Id > key {
 				break
 			}
 		}
 	}
 
-	if aimingNode != nil {
+	if aimingNode.Address != "" {
+		log.Println("key not found in node, going to forward the query to:")
+		log.Println("nodeAddress: " + aimingNode.Address)
 		client := Client{}
 		return *client.Query(aimingNode.Address, key)
 	}
@@ -207,18 +228,13 @@ func distance(i int64, j int64, m int) int64 {
 
 func (n *Node) HandleNewSuccessor(newSucc NodeRepresentation) error {
 	client := &Client{}
-	if newSucc.Id > n.fingerTable[0].Id {
+	if n.fingerTable[0].Address != "" && newSucc.Id > n.fingerTable[0].Id {
+		log.Println("ping current succ")
 		_, err := client.Ping(n.fingerTable[0].Address)
 		if err == nil { return errors.New("invalid successor") }
 	}
 
 	n.fingerTable[0] = newSucc
-	nNSuccData, err := client.Successor(newSucc.Address)
-	if err != nil {
-		log.Println("unable to retrieve nNSucc info at handleNewSuccessor. Err: " + err.Error())
-	} else {
-		n.nSucc = NodeRepresentation {Id: nNSuccData.Id, Address: nNSuccData.Endpoint}
-	}
 
 	go n.syncSuccKeys()
 
@@ -240,7 +256,7 @@ func (n *Node) HandleNewPredecessor(nPred NodeRepresentation) error {
 }
 
 func (n *Node) Successor() (*NodeRepresentation, error) {
-	if len(n.fingerTable) == 0 {
+	if n.fingerTable == nil || len(n.fingerTable) == 0 || n.fingerTable[0].Address == ""{
 		return nil, errors.New("There is no successor")
 	}
 
@@ -266,7 +282,7 @@ func (n *Node) stabilize() {
 }
 
 func (n *Node) startFingerTable(partner *NodeRepresentation, client Client) {
-	n.fingerTable = []NodeRepresentation{}
+	log.Println("querying succ info in startFingerTable")
 	succInfo := client.Query(partner.Address, n.id)
 	succ := NodeRepresentation {Id: succInfo.ResponsibleNodeId, Address:succInfo.ResponsibleNodeEndpoint }
 	n.fingerTable[0] = succ
@@ -312,6 +328,7 @@ func (n *Node) syncKey(address string, key int64) {
 }
 
 func (n *Node) syncKeys() {
+	log.Println("starting sync keys")
 	start, end := n.keysRange()
 	for i := start; i <= end; i++ {
 		if i < n.id {
@@ -323,6 +340,9 @@ func (n *Node) syncKeys() {
 }
 
 func (n *Node) syncSuccKeys() {
+	if n.fingerTable[0].Address == "" || n.nSucc.Address == "" {
+		return
+	}
 	start := n.id
 	end := (n.nSucc.Id - n.fingerTable[0].Id)/2 + n.fingerTable[0].Id
 
@@ -334,6 +354,9 @@ func (n *Node) syncSuccKeys() {
 func (n *Node) syncPredKeys() {
 	client := &Client{}
 	predOfPred, _ := client.Predecessor(n.predecessor.Address)
+	if predOfPred.Endpoint == "" {
+		return
+	}
 	start := (n.predecessor.Id - predOfPred.Id)/2 + predOfPred.Id
 	end := n.predecessor.Id - 1
 

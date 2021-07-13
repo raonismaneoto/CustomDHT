@@ -16,7 +16,7 @@ func (c *Client) Ping(address string) (grpc_api.Empty, error){
 	nc, conn := grpcClient(address)
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
 	response, err := nc.Ping(ctx, &grpc_api.Empty{})
@@ -32,7 +32,7 @@ func (c *Client) HandleNewSuccessor(receiverAddress string, newSucc NodeRepresen
 	nc, conn := grpcClient(receiverAddress)
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
 	response, err := nc.HandleNewSuccessor(ctx, &grpc_api.HandleNewSuccessorRequest{Endpoint: newSucc.Address, Id: newSucc.Id})
@@ -48,7 +48,7 @@ func (c *Client) HandleNewPredecessor(receiverAddress string, newPred NodeRepres
 	nc, conn := grpcClient(receiverAddress)
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
 	response, err := nc.HandleNewPredecessor(ctx, &grpc_api.HandleNewPredecessorRequest{Endpoint: newPred.Address, Id: newPred.Id})
@@ -64,7 +64,7 @@ func (c *Client) Predecessor(address string) (*grpc_api.PredecessorResponse, err
 	nc, conn := grpcClient(address)
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
 	response, err := nc.Predecessor(ctx, &grpc_api.Empty{})
@@ -80,7 +80,7 @@ func (c *Client) Successor(address string) (*grpc_api.SuccessorResponse, error){
 	nc, conn := grpcClient(address)
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
 	response, err := nc.Successor(ctx, &grpc_api.Empty{})
@@ -93,20 +93,24 @@ func (c *Client) Successor(address string) (*grpc_api.SuccessorResponse, error){
 }
 
 func (c *Client) Query(address string, key int64) (*grpc_api.QueryResponse){
+	log.Println("starting querying")
 	nc, conn := grpcClient(address)
+	log.Println("connection created")
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
-	var response *grpc_api.QueryResponse
-	var err error
-	for i := 3; i > 0; i-- {
-		response, err = nc.Query(ctx, &grpc_api.QueryRequest{Key: key})
-		if err != nil {
-			log.Println(err.Error())
-			time.Sleep(5*time.Second)
-			continue
+
+	log.Println("calling nc.Query")
+	response, err := nc.Query(ctx, &grpc_api.QueryRequest{Key: key})
+	log.Println(response)
+
+	if err != nil {
+		return &grpc_api.QueryResponse{
+			Data:                    nil,
+			ResponsibleNodeId:       0,
+			ResponsibleNodeEndpoint: "",
 		}
 	}
 
@@ -117,7 +121,7 @@ func (c *Client) RepSave(address string, key int64, value []byte) (*grpc_api.Emp
 	nc, conn := grpcClient(address)
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
 	response, err := nc.RepSave(ctx, &grpc_api.RepSaveRequest{Key: key, Value: value})
@@ -133,7 +137,7 @@ func (c *Client) Save(address string, key int64, value []byte) (*grpc_api.Empty,
 	nc, conn := grpcClient(address)
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
 	response, err := nc.Save(ctx, &grpc_api.SaveRequest{Key: key, Data: value})
@@ -149,7 +153,7 @@ func (c *Client) Delete(address string, key int64) (*grpc_api.Empty, error){
 	nc, conn := grpcClient(address)
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
 	response, err := nc.Delete(ctx, &grpc_api.DeleteRequest{Key: key})
@@ -163,11 +167,13 @@ func (c *Client) Delete(address string, key int64) (*grpc_api.Empty, error){
 
 
 func grpcClient(address string) (grpc_api.DHTNodeClient, *grpc.ClientConn){
+	log.Println("Starting grpc connection")
 	conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
 
+	log.Println("Grpc connection started.")
 	return grpc_api.NewDHTNodeClient(conn), conn
 }
 
