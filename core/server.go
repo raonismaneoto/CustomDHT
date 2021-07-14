@@ -81,7 +81,10 @@ func (s *server) HandleNewSuccessor(ctx context.Context, request *grpc_api.Handl
 	err := s.node.HandleNewSuccessor(struct {
 		Id      int64
 		Address string
-	}{Id: request.Id, Address: request.Endpoint})
+	}{Id: request.Id, Address: request.Endpoint}, struct {
+		Id      int64
+		Address string
+	}{Id: request.NSuccId, Address: request.NSuccEndpoint})
 
 	if err != nil {
 		return &grpc_api.HandleNewSuccessorResponse{
@@ -169,4 +172,3 @@ func main() {
 		log.Fatalf("failed to serve: %v", err)
 	}
 }
-

@@ -6,3 +6,4 @@
 ./api/main
 ./api/logs.txt
 ./core/logs.txt
+./main.go

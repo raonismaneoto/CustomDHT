@@ -41,6 +41,8 @@ message HandleNewPredecessorResponse {
 message HandleNewSuccessorRequest {
     int64 id = 1;
     string endpoint = 2;
+    int64 nSuccId = 3;
+    string nSuccEndpoint = 4;
 }
 
 message HandleNewSuccessorResponse {

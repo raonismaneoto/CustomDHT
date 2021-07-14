@@ -1,24 +1,24 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
-	"github.com/raonismaneoto/CustomDHT/commons/helpers"
 	"github.com/raonismaneoto/CustomDHT/commons/grpc_api"
+	"github.com/raonismaneoto/CustomDHT/commons/helpers"
+	"google.golang.org/grpc"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
 	"time"
-	"google.golang.org/grpc"
-	"context"
 )
 
 type HttpServer struct {
 	rootNodeAddress string
-	rootNodeId int64
-	m int
+	rootNodeId      int64
+	m               int
 }
 
 // http api implementation
@@ -73,8 +73,7 @@ func (s *HttpServer) save(w http.ResponseWriter, r *http.Request) {
 	key, kok := body["key"]
 	value, vok := body["value"]
 
-
-	if err != nil  || !kok || !vok{
+	if err != nil || !kok || !vok {
 		log.Println("error when decoding body. " + err.Error())
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
@@ -94,7 +93,7 @@ func (s *HttpServer) remove(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	id, ok := params["id"]
 
-	if !ok{
+	if !ok {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode("Missing data id on request path")
@@ -113,7 +112,7 @@ func (s *HttpServer) retrieve(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	id, ok := params["id"]
 
-	if !ok{
+	if !ok {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode("Missing data id on request path")
@@ -129,7 +128,7 @@ func (s *HttpServer) retrieve(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response.Data)
 }
 
-func Query(address string, key int64) *grpc_api.QueryResponse{
+func Query(address string, key int64) *grpc_api.QueryResponse {
 	conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
@@ -155,7 +154,7 @@ func Query(address string, key int64) *grpc_api.QueryResponse{
 	return response
 }
 
-func Save(address string, key int64, value []byte) *grpc_api.Empty{
+func Save(address string, key int64, value []byte) *grpc_api.Empty {
 	log.Println("connecting to the rpc server, rootNodeAddress:")
 	log.Println(address)
 	conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
@@ -178,7 +177,7 @@ func Save(address string, key int64, value []byte) *grpc_api.Empty{
 	return &grpc_api.Empty{}
 }
 
-func Remove(address string, key int64) *grpc_api.Empty{
+func Remove(address string, key int64) *grpc_api.Empty {
 	conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)

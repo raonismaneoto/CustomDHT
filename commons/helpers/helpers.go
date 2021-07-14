@@ -22,7 +22,7 @@ func GetHash(key string, m int) int64 {
 		sum += asciiValue
 	}
 
-	return sum%int64(math.Pow(2.0, float64(m)))
+	return sum % int64(math.Pow(2.0, float64(m)))
 }
 
 func SetupLogging(id int64) {

@@ -9,10 +9,9 @@ import (
 )
 
 type Client struct {
-
 }
 
-func (c *Client) Ping(address string) (grpc_api.Empty, error){
+func (c *Client) Ping(address string) (grpc_api.Empty, error) {
 	nc, conn := grpcClient(address)
 	defer conn.Close()
 
@@ -28,14 +27,14 @@ func (c *Client) Ping(address string) (grpc_api.Empty, error){
 	return *response, nil
 }
 
-func (c *Client) HandleNewSuccessor(receiverAddress string, newSucc NodeRepresentation) (*grpc_api.HandleNewSuccessorResponse, error){
+func (c *Client) HandleNewSuccessor(receiverAddress string, newSucc NodeRepresentation, nNSucc NodeRepresentation) (*grpc_api.HandleNewSuccessorResponse, error) {
 	nc, conn := grpcClient(receiverAddress)
 	defer conn.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
 
-	response, err := nc.HandleNewSuccessor(ctx, &grpc_api.HandleNewSuccessorRequest{Endpoint: newSucc.Address, Id: newSucc.Id})
+	response, err := nc.HandleNewSuccessor(ctx, &grpc_api.HandleNewSuccessorRequest{Endpoint: newSucc.Address, Id: newSucc.Id, NSuccEndpoint: nNSucc.Address, NSuccId: nNSucc.Id})
 
 	if err != nil {
 		return nil, err
@@ -44,7 +43,7 @@ func (c *Client) HandleNewSuccessor(receiverAddress string, newSucc NodeRepresen
 	return response, nil
 }
 
-func (c *Client) HandleNewPredecessor(receiverAddress string, newPred NodeRepresentation) (*grpc_api.HandleNewPredecessorResponse, error){
+func (c *Client) HandleNewPredecessor(receiverAddress string, newPred NodeRepresentation) (*grpc_api.HandleNewPredecessorResponse, error) {
 	nc, conn := grpcClient(receiverAddress)
 	defer conn.Close()
 
@@ -60,7 +59,7 @@ func (c *Client) HandleNewPredecessor(receiverAddress string, newPred NodeRepres
 	return response, nil
 }
 
-func (c *Client) Predecessor(address string) (*grpc_api.PredecessorResponse, error){
+func (c *Client) Predecessor(address string) (*grpc_api.PredecessorResponse, error) {
 	nc, conn := grpcClient(address)
 	defer conn.Close()
 
@@ -76,7 +75,7 @@ func (c *Client) Predecessor(address string) (*grpc_api.PredecessorResponse, err
 	return response, nil
 }
 
-func (c *Client) Successor(address string) (*grpc_api.SuccessorResponse, error){
+func (c *Client) Successor(address string) (*grpc_api.SuccessorResponse, error) {
 	nc, conn := grpcClient(address)
 	defer conn.Close()
 
@@ -92,7 +91,7 @@ func (c *Client) Successor(address string) (*grpc_api.SuccessorResponse, error){
 	return response, nil
 }
 
-func (c *Client) Query(address string, key int64) (*grpc_api.QueryResponse){
+func (c *Client) Query(address string, key int64) *grpc_api.QueryResponse {
 	log.Println("starting querying")
 	nc, conn := grpcClient(address)
 	log.Println("connection created")
@@ -100,7 +99,6 @@ func (c *Client) Query(address string, key int64) (*grpc_api.QueryResponse){
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
 	defer cancel()
-
 
 	log.Println("calling nc.Query")
 	response, err := nc.Query(ctx, &grpc_api.QueryRequest{Key: key})
@@ -117,7 +115,7 @@ func (c *Client) Query(address string, key int64) (*grpc_api.QueryResponse){
 	return response
 }
 
-func (c *Client) RepSave(address string, key int64, value []byte) (*grpc_api.Empty, error){
+func (c *Client) RepSave(address string, key int64, value []byte) (*grpc_api.Empty, error) {
 	nc, conn := grpcClient(address)
 	defer conn.Close()
 
@@ -133,7 +131,7 @@ func (c *Client) RepSave(address string, key int64, value []byte) (*grpc_api.Emp
 	return response, nil
 }
 
-func (c *Client) Save(address string, key int64, value []byte) (*grpc_api.Empty, error){
+func (c *Client) Save(address string, key int64, value []byte) (*grpc_api.Empty, error) {
 	nc, conn := grpcClient(address)
 	defer conn.Close()
 
@@ -149,7 +147,7 @@ func (c *Client) Save(address string, key int64, value []byte) (*grpc_api.Empty,
 	return response, nil
 }
 
-func (c *Client) Delete(address string, key int64) (*grpc_api.Empty, error){
+func (c *Client) Delete(address string, key int64) (*grpc_api.Empty, error) {
 	nc, conn := grpcClient(address)
 	defer conn.Close()
 
@@ -165,8 +163,7 @@ func (c *Client) Delete(address string, key int64) (*grpc_api.Empty, error){
 	return response, nil
 }
 
-
-func grpcClient(address string) (grpc_api.DHTNodeClient, *grpc.ClientConn){
+func grpcClient(address string) (grpc_api.DHTNodeClient, *grpc.ClientConn) {
 	log.Println("Starting grpc connection")
 	conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
 	if err != nil {
@@ -176,5 +173,3 @@ func grpcClient(address string) (grpc_api.DHTNodeClient, *grpc.ClientConn){
 	log.Println("Grpc connection started.")
 	return grpc_api.NewDHTNodeClient(conn), conn
 }
-
-
