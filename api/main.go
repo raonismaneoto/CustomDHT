@@ -23,7 +23,7 @@ type HttpServer struct {
 
 // http api implementation
 func main() {
-	helpers.SetupLogging(0)
+	helpers.SetupLogging(int64(-1))
 	port := os.Getenv("PORT")
 	rootNodeAddress := os.Getenv("ROOT_NODE_ADDR")
 	rootNodeId, err := strconv.ParseInt(os.Getenv("ROOT_NODE_ID"), 10, 64)
@@ -125,7 +125,7 @@ func (s *HttpServer) retrieve(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(response.Data)
+	json.NewEncoder(w).Encode(string(response.Data))
 }
 
 func Query(address string, key int64) *grpc_api.QueryResponse {

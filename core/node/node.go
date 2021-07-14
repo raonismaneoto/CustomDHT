@@ -292,7 +292,9 @@ func (n *Node) stabilize() {
 		if currNodeInfo.ResponsibleNodeEndpoint == "" {
 			continue
 		}
-		n.fingerTable[i] = NodeRepresentation{Id: currNodeInfo.ResponsibleNodeId, Address: currNodeInfo.ResponsibleNodeEndpoint}
+		if currNodeInfo.ResponsibleNodeId != n.id && currNodeInfo.ResponsibleNodeEndpoint != n.address {
+			n.fingerTable[i] = NodeRepresentation{Id: currNodeInfo.ResponsibleNodeId, Address: currNodeInfo.ResponsibleNodeEndpoint}
+		}
 	}
 }
 
@@ -318,7 +320,9 @@ func (n *Node) startFingerTable(partner *NodeRepresentation, client Client) {
 
 	for i := 1; i < n.m; i++ {
 		currNodeInfo := n.Query((n.id + int64(math.Pow(2, float64(i-1)))) % int64(math.Pow(2, float64(n.m))))
-		n.fingerTable[i] = NodeRepresentation{Id: currNodeInfo.ResponsibleNodeId, Address: currNodeInfo.ResponsibleNodeEndpoint}
+		if currNodeInfo.ResponsibleNodeId != n.id && currNodeInfo.ResponsibleNodeEndpoint != n.address {
+			n.fingerTable[i] = NodeRepresentation{Id: currNodeInfo.ResponsibleNodeId, Address: currNodeInfo.ResponsibleNodeEndpoint}
+		}
 	}
 }
 
