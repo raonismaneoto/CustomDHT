@@ -146,7 +146,7 @@ func Query(address string, key int64) *grpc_api.QueryResponse {
 		log.Println(err.Error())
 		return &grpc_api.QueryResponse{
 			Data:                    nil,
-			ResponsibleNodeId:       -1,
+			ResponsibleNodeId:       0,
 			ResponsibleNodeEndpoint: "",
 		}
 	}

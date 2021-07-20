@@ -7,6 +7,7 @@ import (
 	"math"
 	"net"
 	"os"
+	"strconv"
 )
 
 func GetHash(key string, m int) int64 {
@@ -26,7 +27,7 @@ func GetHash(key string, m int) int64 {
 }
 
 func SetupLogging(id int64) {
-	file, err := os.Create("logs-node-" + string(id) + ".txt")
+	file, err := os.Create("logs-node-" + strconv.FormatInt(id, 10) + ".txt")
 	if err != nil {
 		log.Fatal("unable to create log file.", err)
 	}
@@ -39,7 +40,7 @@ func GetOutboundIP() string {
 		log.Fatal(err)
 	}
 	defer conn.Close()
-
+	
 	localAddr := conn.LocalAddr().(*net.UDPAddr)
 
 	return localAddr.IP.String()

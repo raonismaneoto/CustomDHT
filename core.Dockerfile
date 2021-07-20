@@ -4,7 +4,7 @@ WORKDIR /go/src/dht
 
 COPY ./ ./
 
-WORKDIR /go/src/dht/core
+WORKDIR /go/src/dht/core/main
 
 RUN go install -v
 

@@ -1,8 +1,9 @@
-package node
+package client
 
 import (
 	"context"
 	"github.com/raonismaneoto/CustomDHT/commons/grpc_api"
+	"github.com/raonismaneoto/CustomDHT/core/models"
 	"google.golang.org/grpc"
 	"log"
 	"time"
@@ -27,7 +28,7 @@ func (c *Client) Ping(address string) (grpc_api.Empty, error) {
 	return *response, nil
 }
 
-func (c *Client) HandleNewSuccessor(receiverAddress string, newSucc NodeRepresentation, nNSucc NodeRepresentation) (*grpc_api.HandleNewSuccessorResponse, error) {
+func (c *Client) HandleNewSuccessor(receiverAddress string, newSucc models.NodeRepresentation, nNSucc models.NodeRepresentation) (*grpc_api.HandleNewSuccessorResponse, error) {
 	nc, conn := grpcClient(receiverAddress)
 	defer conn.Close()
 
@@ -43,7 +44,7 @@ func (c *Client) HandleNewSuccessor(receiverAddress string, newSucc NodeRepresen
 	return response, nil
 }
 
-func (c *Client) HandleNewPredecessor(receiverAddress string, newPred NodeRepresentation) (*grpc_api.HandleNewPredecessorResponse, error) {
+func (c *Client) HandleNewPredecessor(receiverAddress string, newPred models.NodeRepresentation) (*grpc_api.HandleNewPredecessorResponse, error) {
 	nc, conn := grpcClient(receiverAddress)
 	defer conn.Close()
 
