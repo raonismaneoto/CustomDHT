@@ -2,13 +2,14 @@ package node
 
 import (
 	"errors"
-	"github.com/raonismaneoto/CustomDHT/commons/grpc_api"
-	client2 "github.com/raonismaneoto/CustomDHT/core/client"
-	"github.com/raonismaneoto/CustomDHT/core/models"
 	"log"
 	"math"
 	"strconv"
 	"time"
+
+	"github.com/raonismaneoto/CustomDHT/commons/grpc_api"
+	client2 "github.com/raonismaneoto/CustomDHT/core/client"
+	"github.com/raonismaneoto/CustomDHT/core/models"
 )
 
 type Node struct {
@@ -126,12 +127,10 @@ func (n *Node) Join(partner *models.NodeRepresentation) {
 }
 
 func (n *Node) RepSave(key int64, data []byte) {
-	go func() {
-		n.replicationBuffer <- struct {
-			key  int64
-			data []byte
-		}{key: key, data: data}
-	}()
+	n.replicationBuffer <- struct {
+		key  int64
+		data []byte
+	}{key: key, data: data}
 }
 
 func (n *Node) Save(key int64, value []byte) error {

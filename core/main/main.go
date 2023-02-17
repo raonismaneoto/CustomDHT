@@ -1,14 +1,15 @@
 package main
 
 import (
-	"github.com/raonismaneoto/CustomDHT/commons/grpc_api"
-	"github.com/raonismaneoto/CustomDHT/commons/helpers"
-	"github.com/raonismaneoto/CustomDHT/core/server"
-	"google.golang.org/grpc"
 	"log"
 	"net"
 	"os"
 	"strconv"
+
+	"github.com/raonismaneoto/CustomDHT/commons/grpc_api"
+	"github.com/raonismaneoto/CustomDHT/commons/helpers"
+	Server "github.com/raonismaneoto/CustomDHT/core/server"
+	"google.golang.org/grpc"
 )
 
 func main() {
@@ -27,10 +28,13 @@ func main() {
 		panic("partnerId must be an integer")
 	}
 
-	nodeId := helpers.GetHash(address, m)
+	var nodeId int64
 
 	if partnerAddress == address {
 		nodeId = partnerId
+	} else {
+		nodeId = helpers.GetHash(address, m)
+		// create or update and check ids file in the nfs
 	}
 
 	helpers.SetupLogging(nodeId)
@@ -46,7 +50,7 @@ func main() {
 
 	log.Println("NodeServer listening at %v", lis.Addr())
 
-	nodeNodeServer.Node.Start(partnerId, partnerAddress)
+	go nodeNodeServer.Node.Start(partnerId, partnerAddress)
 
 	log.Println("going to start grpc NodeServer listener")
 	if err := s.Serve(lis); err != nil {
