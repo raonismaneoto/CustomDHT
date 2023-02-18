@@ -21,6 +21,10 @@ type Entry struct {
 }
 
 func New(t models.MemType) Storage {
+	if t == models.NotSupported {
+		panic("invalid MemType for the storage")
+	}
+
 	s := Storage{}
 	s.memStorage = make(map[int64][]byte)
 	s.Type = t
