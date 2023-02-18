@@ -4,38 +4,35 @@ import (
 	"errors"
 	"log"
 	"os"
-)
 
-type MemType int32
-
-const (
-	Mem MemType = iota
-	Disk
+	"github.com/raonismaneoto/CustomDHT/core/models"
 )
 
 type Storage struct {
-	Type       MemType
+	Type       models.MemType
 	memStorage map[int64][]byte
 	root       string
 }
 
-func New(t MemType) Storage {
+type Entry struct {
+	Key  int64
+	Data []byte
+}
+
+func New(t models.MemType) Storage {
 	s := Storage{}
 	s.memStorage = make(map[int64][]byte)
 	s.Type = t
-	if s.Type == Disk {
+	if s.Type == models.Disk {
 		os.Mkdir("./data", 0644)
 		s.root = "./data"
 	}
 	return s
 }
 
-func (s *Storage) Save(data struct {
-	key  int64
-	data []byte
-}) error {
+func (s *Storage) Save(data Entry) error {
 	var err error
-	if s.Type == Mem {
+	if s.Type == models.Mem {
 		err = s.saveMem(data)
 	} else {
 		err = s.saveDisk(data)
@@ -52,7 +49,7 @@ func (s *Storage) Save(data struct {
 func (s *Storage) Read(key int64) ([]byte, error) {
 	var data []byte
 	var err error
-	if s.Type == Mem {
+	if s.Type == models.Mem {
 		data, err = s.readMem(key)
 	} else {
 		data, err = s.readDisk(key)
@@ -66,28 +63,38 @@ func (s *Storage) Read(key int64) ([]byte, error) {
 	return data, nil
 }
 
-func (s *Storage) saveMem(data struct {
-	key  int64
-	data []byte
-}) error {
-	s.memStorage[data.key] = data.data
+func (s *Storage) Delete(key int64) error {
+	var err error
+	if s.Type == models.Mem {
+		err = s.deleteMem(key)
+	} else {
+		err = s.deleteDisk(key)
+	}
+
+	if err != nil {
+		log.Println("error while deleting data: %v", err)
+		return err
+	}
+
 	return nil
 }
 
-func (s *Storage) saveDisk(data struct {
-	key  int64
-	data []byte
-}) error {
-	f, err := os.OpenFile(s.root+"/"+string(data.key), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+func (s *Storage) saveMem(data Entry) error {
+	s.memStorage[data.Key] = data.Data
+	return nil
+}
+
+func (s *Storage) saveDisk(data Entry) error {
+	f, err := os.OpenFile(s.root+"/"+string(data.Key), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		log.Println("unable to open/create %v", data.key)
+		log.Println("unable to open/create %v", data.Key)
 		return err
 	}
 
 	defer f.Close()
 
-	if _, err := f.Write(data.data); err != nil {
-		log.Println("unable to write to %v", data.key)
+	if _, err := f.Write(data.Data); err != nil {
+		log.Println("unable to write to %v", data.Key)
 	}
 
 	return err
@@ -106,7 +113,7 @@ func (s *Storage) readDisk(key int64) ([]byte, error) {
 	if err != nil {
 		log.Println("unable to open file %v", string(key))
 		log.Println(err)
-		return nil, err
+		return nil, errors.New("Key not found")
 	}
 
 	defer f.Close()
@@ -125,4 +132,13 @@ func (s *Storage) readDisk(key int64) ([]byte, error) {
 	}
 
 	return content, nil
+}
+
+func (s *Storage) deleteMem(key int64) error {
+	delete(s.memStorage, key)
+	return nil
+}
+
+func (s *Storage) deleteDisk(key int64) error {
+	return os.Remove(s.root + "/" + string(key))
 }

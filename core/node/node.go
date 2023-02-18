@@ -4,26 +4,25 @@ import (
 	"errors"
 	"log"
 	"math"
+	"os"
 	"strconv"
 	"time"
 
 	"github.com/raonismaneoto/CustomDHT/commons/grpc_api"
 	client2 "github.com/raonismaneoto/CustomDHT/core/client"
 	"github.com/raonismaneoto/CustomDHT/core/models"
+	"github.com/raonismaneoto/CustomDHT/core/storage"
 )
 
 type Node struct {
 	fingerTable       []models.NodeRepresentation
 	id                int64
 	address           string
-	storage           map[int64][]byte
+	storage           storage.Storage
 	predecessor       models.NodeRepresentation
 	nSucc             models.NodeRepresentation
 	m                 int
-	replicationBuffer chan struct {
-		key  int64
-		data []byte
-	}
+	replicationBuffer chan storage.Entry
 }
 
 func New(id int64, address string, m int) *Node {
@@ -38,13 +37,10 @@ func (n *Node) Start(partnerId int64, partnerAddr string) {
 
 	log.Println("Starting node: %v", n.id)
 	log.Println("creating replicationBuffer")
-	n.replicationBuffer = make(chan struct {
-		key  int64
-		data []byte
-	}, 50)
+	n.replicationBuffer = make(chan storage.Entry, 50)
 	log.Println("going to call Join")
 	n.fingerTable = make([]models.NodeRepresentation, n.m, n.m)
-	n.storage = make(map[int64][]byte)
+	n.storage = storage.New(models.GetMemTypeFromString(os.Getenv("STORAGE_TYPE")))
 	n.predecessor = models.NodeRepresentation{
 		Id:      0,
 		Address: "",
@@ -62,13 +58,11 @@ func (n *Node) Start(partnerId int64, partnerAddr string) {
 	periodicInvocation(n.stabilize, 120)
 
 	go n.syncReplicatedKeys()
-
-	periodicInvocation(n.logStoredKeys, 60)
 }
 
 func (n *Node) syncReplicatedKeys() {
 	for msg := range n.replicationBuffer {
-		n.storage[msg.key] = msg.data
+		n.storage.Save(msg)
 	}
 }
 
@@ -127,16 +121,13 @@ func (n *Node) Join(partner *models.NodeRepresentation) {
 }
 
 func (n *Node) RepSave(key int64, data []byte) {
-	n.replicationBuffer <- struct {
-		key  int64
-		data []byte
-	}{key: key, data: data}
+	n.replicationBuffer <- storage.Entry{Key: key, Data: data}
 }
 
 func (n *Node) Save(key int64, value []byte) error {
 	client := client2.Client{}
 	if n.mustKeyBeInNode(key) {
-		n.storage[key] = value
+		n.storage.Save(storage.Entry{Key: key, Data: value})
 		inflectionPoint := (n.id-n.predecessor.Id)/2 + n.predecessor.Id
 		if key >= inflectionPoint {
 			client.RepSave(n.fingerTable[0].Address, key, value)
@@ -153,7 +144,7 @@ func (n *Node) Save(key int64, value []byte) error {
 }
 
 func (n *Node) Delete(key int64) {
-	delete(n.storage, key)
+	n.storage.Delete(key)
 
 	client := client2.Client{}
 	inflectionPoint := (n.id-n.predecessor.Id)/2 + n.predecessor.Id
@@ -166,9 +157,9 @@ func (n *Node) Delete(key int64) {
 
 func (n *Node) Query(key int64) grpc_api.QueryResponse {
 	if n.mustKeyBeInNode(key) {
-		data, ok := n.storage[key]
+		data, err := n.storage.Read(key)
 
-		if !ok {
+		if err.Error() == "Key not found" {
 			log.Println("Key" + strconv.FormatInt(key, 10) + " not found.")
 			return grpc_api.QueryResponse{
 				Data:                    []byte{},
@@ -328,7 +319,7 @@ func (n *Node) syncKey(address string, key int64) {
 	client := client2.Client{}
 	response := client.Query(address, key)
 	if response.Data != nil && len(response.Data) > 0 {
-		n.storage[key] = response.Data
+		n.storage.Save(storage.Entry{Key: key, Data: response.Data})
 	}
 }
 
@@ -380,12 +371,4 @@ func periodicInvocation(f func(), secs int) {
 			}
 		}
 	}()
-}
-
-func (n *Node) logStoredKeys() {
-	msg := "Stored keys: "
-	for k, _ := range n.storage {
-		msg += "" + strconv.FormatInt(k, 10) + " "
-	}
-	log.Println(msg)
 }
