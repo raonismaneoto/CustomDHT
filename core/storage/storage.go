@@ -2,6 +2,7 @@ package storage
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"os"
 
@@ -85,7 +86,7 @@ func (s *Storage) saveMem(data Entry) error {
 }
 
 func (s *Storage) saveDisk(data Entry) error {
-	f, err := os.OpenFile(s.root+"/"+string(data.Key), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(s.root+"/"+fmt.Sprint(data.Key), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Println("unable to open/create %v", data.Key)
 		return err
@@ -109,9 +110,9 @@ func (s *Storage) readMem(key int64) ([]byte, error) {
 }
 
 func (s *Storage) readDisk(key int64) ([]byte, error) {
-	f, err := os.Open(s.root + "/" + string(key))
+	f, err := os.Open(s.root + "/" + fmt.Sprint(key))
 	if err != nil {
-		log.Println("unable to open file %v", string(key))
+		log.Println("unable to open file %v", fmt.Sprint(key))
 		log.Println(err)
 		return nil, errors.New("Key not found")
 	}
@@ -140,5 +141,5 @@ func (s *Storage) deleteMem(key int64) error {
 }
 
 func (s *Storage) deleteDisk(key int64) error {
-	return os.Remove(s.root + "/" + string(key))
+	return os.Remove(s.root + "/" + fmt.Sprint(key))
 }

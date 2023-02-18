@@ -38,7 +38,6 @@ func (n *Node) Start(partnerId int64, partnerAddr string) {
 	log.Println("Starting node: %v", n.id)
 	log.Println("creating replicationBuffer")
 	n.replicationBuffer = make(chan storage.Entry, 50)
-	log.Println("going to call Join")
 	n.fingerTable = make([]models.NodeRepresentation, n.m, n.m)
 	n.storage = storage.New(models.GetMemTypeFromString(os.Getenv("STORAGE_TYPE")))
 	n.predecessor = models.NodeRepresentation{
@@ -62,12 +61,15 @@ func (n *Node) Start(partnerId int64, partnerAddr string) {
 
 func (n *Node) syncReplicatedKeys() {
 	for msg := range n.replicationBuffer {
-		n.storage.Save(msg)
+		err := n.storage.Save(msg)
+		if err != nil {
+			log.Println(err.Error())
+		}
 	}
 }
 
 func (n *Node) checkSucc() {
-	if n.fingerTable == nil || len(n.fingerTable) == 0 {
+	if !n.isFingerSet(0) {
 		return
 	}
 
@@ -127,39 +129,60 @@ func (n *Node) RepSave(key int64, data []byte) {
 func (n *Node) Save(key int64, value []byte) error {
 	client := client2.Client{}
 	if n.mustKeyBeInNode(key) {
-		n.storage.Save(storage.Entry{Key: key, Data: value})
+		log.Println("saving the data in this node")
+		err := n.storage.Save(storage.Entry{Key: key, Data: value})
+		if err != nil {
+			log.Println(err.Error())
+			return err
+		}
 		inflectionPoint := (n.id-n.predecessor.Id)/2 + n.predecessor.Id
 		if key >= inflectionPoint {
-			client.RepSave(n.fingerTable[0].Address, key, value)
+			if n.isFingerSet(0) {
+				client.RepSave(n.fingerTable[0].Address, key, value)
+			}
 		} else {
-			client.RepSave(n.predecessor.Address, key, value)
+			if n.predecessor.Address != "" {
+				client.RepSave(n.predecessor.Address, key, value)
+			}
 		}
 		return nil
 	}
 
 	// else the request must be passed to the responsible node
+	log.Println("going to try to forward the save")
 	response := n.Query(key)
 	_, err := client.Save(response.ResponsibleNodeEndpoint, key, value)
 	return err
 }
 
-func (n *Node) Delete(key int64) {
-	n.storage.Delete(key)
+func (n *Node) Delete(key int64) error {
+	err := n.storage.Delete(key)
+	if err != nil {
+		log.Println(err.Error())
+		return err
+	}
 
 	client := client2.Client{}
 	inflectionPoint := (n.id-n.predecessor.Id)/2 + n.predecessor.Id
 	if key >= inflectionPoint {
-		client.Delete(n.fingerTable[0].Address, key)
+		if n.isFingerSet(0) {
+			client.Delete(n.fingerTable[0].Address, key)
+		}
 	} else {
-		client.Delete(n.predecessor.Address, key)
+		if n.predecessor.Address != "" {
+			client.Delete(n.predecessor.Address, key)
+		}
 	}
+
+	return nil
 }
 
 func (n *Node) Query(key int64) grpc_api.QueryResponse {
 	if n.mustKeyBeInNode(key) {
+		log.Println("going to return the query from this node")
 		data, err := n.storage.Read(key)
 
-		if err.Error() == "Key not found" {
+		if err != nil && err.Error() == "Key not found" {
 			log.Println("Key" + strconv.FormatInt(key, 10) + " not found.")
 			return grpc_api.QueryResponse{
 				Data:                    []byte{},
@@ -180,6 +203,7 @@ func (n *Node) Query(key int64) grpc_api.QueryResponse {
 		Address: "",
 	}
 
+	log.Println("looking for the closest finger for this key")
 	//take the smallest distance node
 	smallestDistance := int64(math.Pow(2, float64(n.m))) + 1000
 	for _, finger := range n.fingerTable {
@@ -304,7 +328,15 @@ func (n *Node) startFingerTable(partner *models.NodeRepresentation, client clien
 }
 
 func (n *Node) mustKeyBeInNode(key int64) bool {
-	return n.predecessor.Address != "" || (key >= n.predecessor.Id && key < n.id)
+	if n.predecessor.Address == "" {
+		return true
+	}
+
+	if n.predecessor.Address != "" && n.predecessor.Id > n.id {
+		return key < n.id || key >= n.predecessor.Id
+	}
+
+	return (key >= n.predecessor.Id && key < n.id)
 }
 
 func (n *Node) keysRange() (int64, int64) {
@@ -319,7 +351,10 @@ func (n *Node) syncKey(address string, key int64) {
 	client := client2.Client{}
 	response := client.Query(address, key)
 	if response.Data != nil && len(response.Data) > 0 {
-		n.storage.Save(storage.Entry{Key: key, Data: response.Data})
+		err := n.storage.Save(storage.Entry{Key: key, Data: response.Data})
+		if err != nil {
+			log.Println(err.Error())
+		}
 	}
 }
 
@@ -371,4 +406,8 @@ func periodicInvocation(f func(), secs int) {
 			}
 		}
 	}()
+}
+
+func (n *Node) isFingerSet(index int) bool {
+	return n.fingerTable != nil && len(n.fingerTable) >= index && n.fingerTable[index].Address != ""
 }

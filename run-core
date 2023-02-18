@@ -1,12 +1,17 @@
 #!/bin/bash
 
-readonly ROOT_PATH=$GO_PATH/src/github.com/raonismaneoto/CustomDHT/
-readonly CORE_PATH=$GO_PATH/src/github.com/raonismaneoto/CustomDHT/core
+readonly ROOT_PATH=$GOPATH/src/github.com/raonismaneoto/CustomDHT/
+readonly CORE_PATH=$GOPATH/src/github.com/raonismaneoto/CustomDHT/core
 readonly CONTAINER_NAME=DHT-NODE-$RANDOM
 readonly IMAGE_NAME=dht-node
 readonly IMAGE_VERSION=latest
 readonly IMAGE=$IMAGE_NAME:$IMAGE_VERSION
 readonly PORT=$(grep ^NODE_PORT $CORE_PATH/.env | awk -F "=" '{print $2}')
+
+check_dependencies() {
+    sudo docker --version
+    [ ! "$?" -eq 0 ] && echo "docker is not installed" && exit 1
+}
 
 build_image() {
     sudo docker build --no-cache --build-arg PORT_ARG=$1 -f core.Dockerfile -t raonismaneoto/$IMAGE .
@@ -24,6 +29,7 @@ start() {
 }
 
 main() {
+    check_dependencies
     cd $ROOT_PATH
     [[ -n $1 ]] && [[ "$1" == "--build-image" ]] && build_image $PORT
     [[ -z $1 ]] || [[ "$1" != "--build-image" ]] && setup_container_image
