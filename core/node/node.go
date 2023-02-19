@@ -2,13 +2,14 @@ package node
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"math"
 	"os"
 	"strconv"
-	"time"
 
 	"github.com/raonismaneoto/CustomDHT/commons/grpc_api"
+	"github.com/raonismaneoto/CustomDHT/commons/helpers"
 	client2 "github.com/raonismaneoto/CustomDHT/core/client"
 	"github.com/raonismaneoto/CustomDHT/core/models"
 	"github.com/raonismaneoto/CustomDHT/core/storage"
@@ -53,8 +54,8 @@ func (n *Node) Start(partnerId int64, partnerAddr string) {
 		n.Join(partner)
 	}
 
-	periodicInvocation(n.checkSucc, 60)
-	periodicInvocation(n.stabilize, 120)
+	helpers.PeriodicInvocation(n.checkSucc, 60)
+	helpers.PeriodicInvocation(n.stabilize, 120)
 
 	go n.syncReplicatedKeys()
 }
@@ -150,8 +151,11 @@ func (n *Node) Save(key int64, value []byte) error {
 
 	// else the request must be passed to the responsible node
 	log.Println("going to try to forward the save")
-	response := n.Query(key)
-	_, err := client.Save(response.ResponsibleNodeEndpoint, key, value)
+	response, err := n.Owner(key)
+	if err != nil {
+		return err
+	}
+	_, err = client.Save(response.OwnerNodeEndpoint, key, value)
 	return err
 }
 
@@ -177,6 +181,67 @@ func (n *Node) Delete(key int64) error {
 	return nil
 }
 
+func (n *Node) QueryAsync(key int64, cbuffer chan grpc_api.QueryResponse) {
+	if n.mustKeyBeInNode(key) {
+		log.Println("going to return the query from this node")
+		ebuffer := make(chan error)
+		bcbuffer := make(chan []byte)
+
+		go n.storage.ReadAsync(key, bcbuffer, ebuffer)
+
+		select {
+		case content, ok := <-bcbuffer:
+			if !ok {
+				close(cbuffer)
+			} else {
+				resp := grpc_api.QueryResponse{
+					Data:                    content,
+					ResponsibleNodeEndpoint: n.address,
+					ResponsibleNodeId:       n.id,
+				}
+				cbuffer <- resp
+			}
+		case err, ok := <-ebuffer:
+			if !ok {
+				return
+			}
+			if err != nil && err.Error() == "Key not found" {
+				log.Println("Key" + strconv.FormatInt(key, 10) + " not found.")
+				resp := grpc_api.QueryResponse{
+					Data:                    []byte{},
+					ResponsibleNodeEndpoint: "",
+				}
+				cbuffer <- resp
+			}
+		}
+
+	}
+
+	aimingNode := n.findAimingNode(key)
+	if aimingNode.Address != "" {
+		log.Println("key not found in node, going to forward the query to:")
+		log.Println("nodeAddress: " + aimingNode.Address)
+		client := client2.Client{}
+		owner, err := client.Owner(aimingNode.Address, key)
+		if err != nil {
+			resp := grpc_api.QueryResponse{
+				Data:                    []byte{},
+				ResponsibleNodeEndpoint: "",
+			}
+			cbuffer <- resp
+		}
+		resp := grpc_api.QueryResponse{
+			Data:                    []byte{},
+			ResponsibleNodeEndpoint: owner.OwnerNodeEndpoint,
+			ResponsibleNodeId:       owner.OwnerNodeId,
+		}
+		cbuffer <- resp
+	}
+
+	log.Println("unable to query for key" + strconv.FormatInt(key, 10))
+	panic("unable to query for key" + strconv.FormatInt(key, 10))
+}
+
 func (n *Node) Query(key int64) grpc_api.QueryResponse {
 	if n.mustKeyBeInNode(key) {
 		log.Println("going to return the query from this node")
@@ -198,22 +263,7 @@ func (n *Node) Query(key int64) grpc_api.QueryResponse {
 		}
 	}
 
-	var aimingNode = models.NodeRepresentation{
-		Id:      0,
-		Address: "",
-	}
-
-	log.Println("looking for the closest finger for this key")
-	//take the smallest distance node
-	smallestDistance := int64(math.Pow(2, float64(n.m))) + 1000
-	for _, finger := range n.fingerTable {
-		currentDistance := distance(finger.Id, key, n.m)
-		if currentDistance < smallestDistance {
-			smallestDistance = currentDistance
-			aimingNode = finger
-		}
-	}
-
+	aimingNode := n.findAimingNode(key)
 	if aimingNode.Address != "" {
 		log.Println("key not found in node, going to forward the query to:")
 		log.Println("nodeAddress: " + aimingNode.Address)
@@ -287,22 +337,49 @@ func (n *Node) Predecessor() (models.NodeRepresentation, error) {
 	return n.predecessor, nil
 }
 
+func (n *Node) Owner(key int64) (*grpc_api.OwnerResponse, error) {
+	if n.mustKeyBeInNode(key) {
+		return &grpc_api.OwnerResponse{
+			OwnerNodeId:       n.id,
+			OwnerNodeEndpoint: n.address,
+		}, nil
+	}
+
+	aimingNode := n.findAimingNode(key)
+	if aimingNode.Address != "" {
+		log.Println("key not found in node, going to forward the query to:")
+		log.Println("nodeAddress: " + aimingNode.Address)
+		client := client2.Client{}
+		return client.Owner(aimingNode.Address, key)
+	}
+
+	return nil, errors.New("unable to get the owner of the key: " + fmt.Sprint(key))
+
+}
+
 func (n *Node) stabilize() {
 	for i := 1; i < n.m; i++ {
-		currNodeInfo := n.Query((n.id + int64(math.Pow(2, float64(i-1)))) % int64(math.Pow(2, float64(n.m))))
-		if currNodeInfo.ResponsibleNodeEndpoint == "" {
+		currNodeInfo, err := n.Owner((n.id + int64(math.Pow(2, float64(i-1)))) % int64(math.Pow(2, float64(n.m))))
+		if err != nil {
+			log.Println(err.Error())
 			continue
 		}
-		if currNodeInfo.ResponsibleNodeId != n.id && currNodeInfo.ResponsibleNodeEndpoint != n.address {
-			n.fingerTable[i] = models.NodeRepresentation{Id: currNodeInfo.ResponsibleNodeId, Address: currNodeInfo.ResponsibleNodeEndpoint}
+		if currNodeInfo.OwnerNodeEndpoint == "" {
+			continue
+		}
+		if currNodeInfo.OwnerNodeId != n.id && currNodeInfo.OwnerNodeEndpoint != n.address {
+			n.fingerTable[i] = models.NodeRepresentation{Id: currNodeInfo.OwnerNodeId, Address: currNodeInfo.OwnerNodeEndpoint}
 		}
 	}
 }
 
 func (n *Node) startFingerTable(partner *models.NodeRepresentation, client client2.Client) {
 	log.Println("querying succ info in startFingerTable")
-	succInfo := client.Query(partner.Address, n.id)
-	succ := models.NodeRepresentation{Id: succInfo.ResponsibleNodeId, Address: succInfo.ResponsibleNodeEndpoint}
+	succInfo, err := client.Owner(partner.Address, n.id)
+	if err != nil {
+		panic(err.Error())
+	}
+	succ := models.NodeRepresentation{Id: succInfo.OwnerNodeId, Address: succInfo.OwnerNodeEndpoint}
 	n.fingerTable[0] = succ
 
 	nSuccInfo, err := client.Successor(n.fingerTable[0].Address)
@@ -320,9 +397,13 @@ func (n *Node) startFingerTable(partner *models.NodeRepresentation, client clien
 	}
 
 	for i := 1; i < n.m; i++ {
-		currNodeInfo := n.Query((n.id + int64(math.Pow(2, float64(i-1)))) % int64(math.Pow(2, float64(n.m))))
-		if currNodeInfo.ResponsibleNodeId != n.id && currNodeInfo.ResponsibleNodeEndpoint != n.address {
-			n.fingerTable[i] = models.NodeRepresentation{Id: currNodeInfo.ResponsibleNodeId, Address: currNodeInfo.ResponsibleNodeEndpoint}
+		currNodeInfo, err := n.Owner((n.id + int64(math.Pow(2, float64(i-1)))) % int64(math.Pow(2, float64(n.m))))
+		if err != nil {
+			log.Println(err.Error())
+			continue
+		}
+		if currNodeInfo.OwnerNodeId != n.id && currNodeInfo.OwnerNodeEndpoint != n.address {
+			n.fingerTable[i] = models.NodeRepresentation{Id: currNodeInfo.OwnerNodeId, Address: currNodeInfo.OwnerNodeEndpoint}
 		}
 	}
 }
@@ -396,18 +477,26 @@ func (n *Node) syncPredKeys() {
 	}
 }
 
-func periodicInvocation(f func(), secs int) {
-	go func() {
-		ticker := time.NewTicker(time.Duration(secs) * time.Second)
-		for {
-			select {
-			case <-ticker.C:
-				f()
-			}
-		}
-	}()
-}
-
 func (n *Node) isFingerSet(index int) bool {
 	return n.fingerTable != nil && len(n.fingerTable) >= index && n.fingerTable[index].Address != ""
+}
+
+func (n *Node) findAimingNode(key int64) models.NodeRepresentation {
+	var aimingNode = models.NodeRepresentation{
+		Id:      0,
+		Address: "",
+	}
+
+	log.Println("looking for the closest finger for this key")
+	//take the smallest distance node
+	smallestDistance := int64(math.Pow(2, float64(n.m))) + 1000
+	for _, finger := range n.fingerTable {
+		currentDistance := distance(finger.Id, key, n.m)
+		if currentDistance < smallestDistance {
+			smallestDistance = currentDistance
+			aimingNode = finger
+		}
+	}
+
+	return aimingNode
 }

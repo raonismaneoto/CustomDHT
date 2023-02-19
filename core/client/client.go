@@ -2,11 +2,12 @@ package client
 
 import (
 	"context"
+	"log"
+	"time"
+
 	"github.com/raonismaneoto/CustomDHT/commons/grpc_api"
 	"github.com/raonismaneoto/CustomDHT/core/models"
 	"google.golang.org/grpc"
-	"log"
-	"time"
 )
 
 type Client struct {
@@ -116,6 +117,30 @@ func (c *Client) Query(address string, key int64) *grpc_api.QueryResponse {
 	return response
 }
 
+func (c *Client) QueryAsync(address string, key int64) *grpc_api.QueryResponse {
+	log.Println("starting querying")
+	nc, conn := grpcClient(address)
+	log.Println("connection created")
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+
+	log.Println("calling nc.Query")
+	response, err := nc.Query(ctx, &grpc_api.QueryRequest{Key: key})
+	log.Println(response)
+
+	if err != nil {
+		return &grpc_api.QueryResponse{
+			Data:                    nil,
+			ResponsibleNodeId:       0,
+			ResponsibleNodeEndpoint: "",
+		}
+	}
+
+	return response
+}
+
 func (c *Client) RepSave(address string, key int64, value []byte) (*grpc_api.Empty, error) {
 	nc, conn := grpcClient(address)
 	defer conn.Close()
@@ -156,6 +181,22 @@ func (c *Client) Delete(address string, key int64) (*grpc_api.Empty, error) {
 	defer cancel()
 
 	response, err := nc.Delete(ctx, &grpc_api.DeleteRequest{Key: key})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+func (c *Client) Owner(address string, key int64) (*grpc_api.OwnerResponse, error) {
+	nc, conn := grpcClient(address)
+	defer conn.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+
+	response, err := nc.Owner(ctx, &grpc_api.OwnerRequest{Key: key})
 
 	if err != nil {
 		return nil, err

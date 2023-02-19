@@ -3,10 +3,11 @@ package Server
 import (
 	"context"
 	"errors"
-	"github.com/raonismaneoto/CustomDHT/commons/grpc_api"
-	"github.com/raonismaneoto/CustomDHT/core/node"
 	"log"
 	"strconv"
+
+	"github.com/raonismaneoto/CustomDHT/commons/grpc_api"
+	"github.com/raonismaneoto/CustomDHT/core/node"
 )
 
 type NodeServer struct {
@@ -109,6 +110,37 @@ func (s *NodeServer) Query(ctx context.Context, request *grpc_api.QueryRequest) 
 	return &response, nil
 }
 
+func (s *NodeServer) QueryStream(request *grpc_api.QueryRequest, srv grpc_api.DHTNode_QueryStreamServer) error {
+	log.Println("Query call received. Key: " + strconv.FormatInt(request.Key, 10))
+	ctx := srv.Context()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		cbuffer := make(chan grpc_api.QueryResponse)
+
+		go s.Node.QueryAsync(request.Key, cbuffer)
+
+		response, ok := <-cbuffer
+		if !ok {
+			return nil
+		}
+
+		if response.ResponsibleNodeEndpoint == "" {
+			return errors.New("key not found")
+		}
+
+		if err := srv.Send(&response); err != nil {
+			log.Printf("send error %v", err)
+			return err
+		}
+	}
+}
+
 func (s *NodeServer) Save(ctx context.Context, request *grpc_api.SaveRequest) (*grpc_api.Empty, error) {
 	log.Println("Save call received. Key: " + strconv.FormatInt(request.Key, 10))
 	err := s.Node.Save(request.Key, request.Data)
@@ -125,4 +157,13 @@ func (s *NodeServer) RepSave(ctx context.Context, request *grpc_api.RepSaveReque
 	log.Println("RepSave call received. Key: " + strconv.FormatInt(request.Key, 10))
 	s.Node.RepSave(request.Key, request.Value)
 	return &grpc_api.Empty{}, nil
+}
+
+func (s *NodeServer) Owner(ctx context.Context, request *grpc_api.OwnerRequest) (*grpc_api.OwnerResponse, error) {
+	log.Println("RepSave call received. Key: " + strconv.FormatInt(request.Key, 10))
+	resp, err := s.Node.Owner(request.Key)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
