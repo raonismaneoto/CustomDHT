@@ -201,3 +201,7 @@ func (s *NodeServer) Owner(ctx context.Context, request *grpc_api.OwnerRequest) 
 	}
 	return resp, nil
 }
+
+func (*NodeServer) mustEmbedUnimplementedDHTNodeServer() {
+	return
+}
