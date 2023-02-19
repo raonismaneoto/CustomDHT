@@ -3,6 +3,7 @@ package Server
 import (
 	"context"
 	"errors"
+	"io"
 	"log"
 	"strconv"
 
@@ -145,6 +146,39 @@ func (s *NodeServer) Save(ctx context.Context, request *grpc_api.SaveRequest) (*
 	log.Println("Save call received. Key: " + strconv.FormatInt(request.Key, 10))
 	err := s.Node.Save(request.Key, request.Data)
 	return &grpc_api.Empty{}, err
+}
+
+func (s *NodeServer) SaveStream(srv grpc_api.DHTNode_SaveStreamServer) error {
+	log.Println("save stream received ")
+	ctx := srv.Context()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		req, err := srv.Recv()
+		if err == io.EOF {
+			log.Println("exit")
+			if err = srv.SendAndClose(&grpc_api.Empty{}); err != nil {
+				return err
+			}
+			return nil
+		}
+		if err != nil {
+			log.Printf("receive error %v", err)
+			continue
+		}
+
+		err = s.Node.Save(req.Key, req.Data)
+		if err != nil {
+			log.Printf("received error %v", err)
+			return err
+		}
+
+	}
 }
 
 func (s *NodeServer) Delete(ctx context.Context, request *grpc_api.DeleteRequest) (*grpc_api.Empty, error) {
