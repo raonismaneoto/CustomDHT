@@ -22,12 +22,12 @@ type Node struct {
 	storage           storage.Storage
 	predecessor       models.NodeRepresentation
 	nSucc             models.NodeRepresentation
-	m                 int
+	M                 int
 	replicationBuffer chan storage.Entry
 }
 
 func New(id int64, address string, m int) *Node {
-	return &Node{id: id, address: address, m: m}
+	return &Node{id: id, address: address, M: m}
 }
 
 func (n *Node) Start(partnerId int64, partnerAddr string) {
@@ -39,7 +39,7 @@ func (n *Node) Start(partnerId int64, partnerAddr string) {
 	log.Println("Starting node: %v", n.id)
 	log.Println("creating replicationBuffer")
 	n.replicationBuffer = make(chan storage.Entry, 50)
-	n.fingerTable = make([]models.NodeRepresentation, n.m, n.m)
+	n.fingerTable = make([]models.NodeRepresentation, n.M, n.M)
 	n.storage = storage.New(models.GetMemTypeFromString(os.Getenv("STORAGE_TYPE")))
 	n.predecessor = models.NodeRepresentation{
 		Id:      0,
@@ -358,8 +358,8 @@ func (n *Node) Owner(key int64) (*grpc_api.OwnerResponse, error) {
 }
 
 func (n *Node) stabilize() {
-	for i := 1; i < n.m; i++ {
-		currNodeInfo, err := n.Owner((n.id + int64(math.Pow(2, float64(i-1)))) % int64(math.Pow(2, float64(n.m))))
+	for i := 1; i < n.M; i++ {
+		currNodeInfo, err := n.Owner((n.id + int64(math.Pow(2, float64(i-1)))) % int64(math.Pow(2, float64(n.M))))
 		if err != nil {
 			log.Println(err.Error())
 			continue
@@ -396,8 +396,8 @@ func (n *Node) startFingerTable(partner *models.NodeRepresentation, client clien
 		n.predecessor = models.NodeRepresentation{Id: predecessor.Id, Address: predecessor.Endpoint}
 	}
 
-	for i := 1; i < n.m; i++ {
-		currNodeInfo, err := n.Owner((n.id + int64(math.Pow(2, float64(i-1)))) % int64(math.Pow(2, float64(n.m))))
+	for i := 1; i < n.M; i++ {
+		currNodeInfo, err := n.Owner((n.id + int64(math.Pow(2, float64(i-1)))) % int64(math.Pow(2, float64(n.M))))
 		if err != nil {
 			log.Println(err.Error())
 			continue
@@ -489,9 +489,9 @@ func (n *Node) findAimingNode(key int64) models.NodeRepresentation {
 
 	log.Println("looking for the closest finger for this key")
 	//take the smallest distance node
-	smallestDistance := int64(math.Pow(2, float64(n.m))) + 1000
+	smallestDistance := int64(math.Pow(2, float64(n.M))) + 1000
 	for _, finger := range n.fingerTable {
-		currentDistance := distance(finger.Id, key, n.m)
+		currentDistance := distance(finger.Id, key, n.M)
 		if currentDistance < smallestDistance {
 			smallestDistance = currentDistance
 			aimingNode = finger

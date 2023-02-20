@@ -13,6 +13,9 @@ service DHTNode {
   rpc Save (SaveRequest) returns (Empty) {}
   rpc Delete (DeleteRequest) returns (Empty) {}
   rpc RepSave (RepSaveRequest) returns (Empty) {}
+  rpc SaveStream (stream SaveRequest) returns (Empty) {}
+  rpc QueryStream (QueryRequest) returns (stream QueryResponse) {}
+  rpc Owner (OwnerRequest) returns (OwnerResponse) {}
 }
 
 message Empty {
@@ -51,6 +54,7 @@ message HandleNewSuccessorResponse {
 
 message QueryRequest {
     int64 key = 1;
+    string strKey = 2;
 }
 
 message QueryResponse {
@@ -62,13 +66,26 @@ message QueryResponse {
 message RepSaveRequest {
     int64 key = 1;
     bytes value = 2;
+    string strKey = 3;
 }
 
 message SaveRequest {
     int64 key = 1;
     bytes data = 2;
+    string strKey = 3;
 }
 
 message DeleteRequest {
     int64 key = 1;
+    string strKey = 2;
+}
+
+message OwnerRequest {
+    int64 key = 1;
+    string strKey = 2;
+}
+
+message OwnerResponse {
+    int64 ownerNodeId = 1;
+    string ownerNodeEndpoint = 2;
 }
