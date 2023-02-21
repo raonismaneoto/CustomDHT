@@ -495,24 +495,20 @@ func (n *Node) isFingerSet(index int) bool {
 
 func (n *Node) findAimingNode(key int64) *models.NodeRepresentation {
 	aimingNode := n.fingerTable[0]
-	log.Println("aiming node started with following addr:")
-	log.Println(aimingNode.Address)
 	possibleNodes := append(n.fingerTable, n.predecessor)
 
-	log.Println("looking for the closest finger for this key")
 	//take the smallest distance node
 	smallestDistance := int64(math.Pow(2, float64(n.M))) + 1000
 	for _, node := range possibleNodes {
+		if node.Id == 0 || node.Address == "" {
+			continue
+		}
 		currentDistance := distance(node.Id, key, n.M)
 		if currentDistance < smallestDistance {
 			smallestDistance = currentDistance
-			log.Println("aiming node addr updated to")
 			aimingNode = node
-			log.Println(aimingNode.Address)
 		}
 	}
-	log.Println("returning aiming node of address")
-	log.Println(aimingNode.Address)
 
 	return &aimingNode
 }
