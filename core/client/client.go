@@ -33,7 +33,7 @@ func (c *Client) HandleNewSuccessor(receiverAddress string, newSucc models.NodeR
 	nc, conn := grpcClient(receiverAddress)
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
 	response, err := nc.HandleNewSuccessor(ctx, &grpc_api.HandleNewSuccessorRequest{Endpoint: newSucc.Address, Id: newSucc.Id, NSuccEndpoint: nNSucc.Address, NSuccId: nNSucc.Id})
@@ -49,7 +49,7 @@ func (c *Client) HandleNewPredecessor(receiverAddress string, newPred models.Nod
 	nc, conn := grpcClient(receiverAddress)
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
 	response, err := nc.HandleNewPredecessor(ctx, &grpc_api.HandleNewPredecessorRequest{Endpoint: newPred.Address, Id: newPred.Id})
@@ -65,7 +65,7 @@ func (c *Client) Predecessor(address string) (*grpc_api.PredecessorResponse, err
 	nc, conn := grpcClient(address)
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
 	response, err := nc.Predecessor(ctx, &grpc_api.Empty{})
@@ -81,7 +81,7 @@ func (c *Client) Successor(address string) (*grpc_api.SuccessorResponse, error) 
 	nc, conn := grpcClient(address)
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*5)
 	defer cancel()
 
 	response, err := nc.Successor(ctx, &grpc_api.Empty{})
@@ -123,7 +123,7 @@ func (c *Client) QueryAsync(address string, key int64) *grpc_api.QueryResponse {
 	log.Println("connection created")
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*30)
 	defer cancel()
 
 	log.Println("calling nc.Query")
@@ -193,7 +193,7 @@ func (c *Client) Owner(address string, key int64) (*grpc_api.OwnerResponse, erro
 	nc, conn := grpcClient(address)
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute*2)
 	defer cancel()
 
 	response, err := nc.Owner(ctx, &grpc_api.OwnerRequest{Key: key})

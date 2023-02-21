@@ -37,6 +37,8 @@ func (n *Node) Start(partnerId int64, partnerAddr string) {
 	}
 
 	log.Println("Starting node: %v", n.id)
+	log.Println("partnerAddr: %v", partnerAddr)
+	log.Println("nodeAddr: %v", n.address)
 	log.Println("creating replicationBuffer")
 	n.replicationBuffer = make(chan storage.Entry, 50)
 	n.fingerTable = make([]models.NodeRepresentation, n.M, n.M)
@@ -189,29 +191,35 @@ func (n *Node) QueryAsync(key int64, cbuffer chan grpc_api.QueryResponse) {
 
 		go n.storage.ReadAsync(key, bcbuffer, ebuffer)
 
-		select {
-		case content, ok := <-bcbuffer:
-			if !ok {
-				close(cbuffer)
-			} else {
-				resp := grpc_api.QueryResponse{
-					Data:                    content,
-					ResponsibleNodeEndpoint: n.address,
-					ResponsibleNodeId:       n.id,
+		for {
+			select {
+			case content, ok := <-bcbuffer:
+				if !ok {
+					close(cbuffer)
+					return
+				} else {
+					resp := grpc_api.QueryResponse{
+						Data:                    content,
+						ResponsibleNodeEndpoint: n.address,
+						ResponsibleNodeId:       n.id,
+					}
+					cbuffer <- resp
 				}
-				cbuffer <- resp
-			}
-		case err, ok := <-ebuffer:
-			if !ok {
-				return
-			}
-			if err != nil && err.Error() == "Key not found" {
-				log.Println("Key" + strconv.FormatInt(key, 10) + " not found.")
-				resp := grpc_api.QueryResponse{
-					Data:                    []byte{},
-					ResponsibleNodeEndpoint: "",
+			case err, ok := <-ebuffer:
+				if !ok {
+					close(cbuffer)
+					return
 				}
-				cbuffer <- resp
+				if err != nil && err.Error() == "Key not found" {
+					log.Println("Key" + strconv.FormatInt(key, 10) + " not found.")
+					resp := grpc_api.QueryResponse{
+						Data:                    []byte{},
+						ResponsibleNodeEndpoint: "",
+					}
+					cbuffer <- resp
+					close(cbuffer)
+					return
+				}
 			}
 		}
 
@@ -287,7 +295,7 @@ func distance(i int64, j int64, m int) int64 {
 
 func (n *Node) HandleNewSuccessor(newSucc models.NodeRepresentation, nNSucc models.NodeRepresentation) error {
 	client := &client2.Client{}
-	if n.fingerTable[0].Address != "" && newSucc.Id > n.fingerTable[0].Id {
+	if n.fingerTable[0].Address != "" && distance(n.id, newSucc.Id, n.M) > distance(n.id, n.fingerTable[0].Id, n.M) {
 		log.Println("ping current succ")
 		_, err := client.Ping(n.fingerTable[0].Address)
 		if err == nil {
@@ -307,7 +315,7 @@ func (n *Node) HandleNewSuccessor(newSucc models.NodeRepresentation, nNSucc mode
 
 func (n *Node) HandleNewPredecessor(nPred models.NodeRepresentation) error {
 	client := &client2.Client{}
-	if nPred.Id < n.predecessor.Id {
+	if n.predecessor.Address != "" && distance(n.id, nPred.Id, n.M) < distance(n.id, n.predecessor.Id, n.M) {
 		_, err := client.Ping(n.predecessor.Address)
 		if err == nil {
 			return errors.New("invalid predecessor")
@@ -346,6 +354,10 @@ func (n *Node) Owner(key int64) (*grpc_api.OwnerResponse, error) {
 	}
 
 	aimingNode := n.findAimingNode(key)
+	log.Println("aimingNOdeAddr:")
+	log.Println(aimingNode.Address)
+	log.Println(aimingNode.Id)
+	log.Println(n.fingerTable[0].Address)
 	if aimingNode.Address != "" {
 		log.Println("key not found in node, going to forward the query to:")
 		log.Println("nodeAddress: " + aimingNode.Address)
@@ -481,22 +493,26 @@ func (n *Node) isFingerSet(index int) bool {
 	return n.fingerTable != nil && len(n.fingerTable) >= index && n.fingerTable[index].Address != ""
 }
 
-func (n *Node) findAimingNode(key int64) models.NodeRepresentation {
-	var aimingNode = models.NodeRepresentation{
-		Id:      0,
-		Address: "",
-	}
+func (n *Node) findAimingNode(key int64) *models.NodeRepresentation {
+	aimingNode := n.fingerTable[0]
+	log.Println("aiming node started with following addr:")
+	log.Println(aimingNode.Address)
+	possibleNodes := append(n.fingerTable, n.predecessor)
 
 	log.Println("looking for the closest finger for this key")
 	//take the smallest distance node
 	smallestDistance := int64(math.Pow(2, float64(n.M))) + 1000
-	for _, finger := range n.fingerTable {
-		currentDistance := distance(finger.Id, key, n.M)
+	for _, node := range possibleNodes {
+		currentDistance := distance(node.Id, key, n.M)
 		if currentDistance < smallestDistance {
 			smallestDistance = currentDistance
-			aimingNode = finger
+			log.Println("aiming node addr updated to")
+			aimingNode = node
+			log.Println(aimingNode.Address)
 		}
 	}
+	log.Println("returning aiming node of address")
+	log.Println(aimingNode.Address)
 
-	return aimingNode
+	return &aimingNode
 }

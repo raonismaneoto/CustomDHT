@@ -128,16 +128,14 @@ func (s *NodeServer) QueryStream(request *grpc_api.QueryRequest, srv grpc_api.DH
 	log.Println("Query call received. Key: " + strconv.FormatInt(request.Key, 10))
 	ctx := srv.Context()
 
+	cbuffer := make(chan grpc_api.QueryResponse)
+	go s.Node.QueryAsync(request.Key, cbuffer)
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
 		}
-
-		cbuffer := make(chan grpc_api.QueryResponse)
-
-		go s.Node.QueryAsync(request.Key, cbuffer)
 
 		response, ok := <-cbuffer
 		if !ok {
@@ -238,7 +236,7 @@ func (s *NodeServer) Owner(ctx context.Context, request *grpc_api.OwnerRequest) 
 		}
 		request.Key = helpers.GetHash(request.StrKey, s.Node.M)
 	}
-	log.Println("RepSave call received. Key: " + strconv.FormatInt(request.Key, 10))
+	log.Println("Owner call received. Key: " + strconv.FormatInt(request.Key, 10))
 	resp, err := s.Node.Owner(request.Key)
 	if err != nil {
 		return nil, err

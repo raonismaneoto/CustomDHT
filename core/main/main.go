@@ -28,13 +28,11 @@ func main() {
 		panic("partnerId must be an integer")
 	}
 
-	var nodeId int64
-
-	if partnerAddress == address {
-		nodeId = partnerId
-	} else {
-		nodeId = helpers.GetHash(address, m)
-		// create or update and check ids file in the nfs
+	nodeId := helpers.GetHash(address, m)
+	// create or update and check ids file in the nfs
+	startingNode := os.Getenv("NETWORK_STARTING_NODE")
+	if startingNode == "true" {
+		partnerAddress = address
 	}
 
 	helpers.SetupLogging(nodeId)

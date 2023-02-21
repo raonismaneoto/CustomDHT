@@ -33,6 +33,13 @@ func SetupLogging(id int64) {
 		log.Fatal("unable to create log file.", err)
 	}
 	log.SetOutput(file)
+	go PeriodicInvocation(func() {
+		os.Remove("logs-node-" + strconv.FormatInt(id, 10) + ".txt")
+		_, err := os.Create("logs-node-" + strconv.FormatInt(id, 10) + ".txt")
+		if err != nil {
+			log.Fatal("unable to create log file.", err)
+		}
+	}, 3600)
 }
 
 func GetOutboundIP() string {
