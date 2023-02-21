@@ -7,6 +7,7 @@ import (
 	"math"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/raonismaneoto/CustomDHT/commons/grpc_api"
 	"github.com/raonismaneoto/CustomDHT/commons/helpers"
@@ -60,6 +61,8 @@ func (n *Node) Start(partnerId int64, partnerAddr string) {
 	helpers.PeriodicInvocation(n.stabilize, 120)
 
 	go n.syncReplicatedKeys()
+	n.printState()
+	helpers.PeriodicInvocation(n.printState, 600)
 }
 
 func (n *Node) syncReplicatedKeys() {
@@ -511,4 +514,26 @@ func (n *Node) findAimingNode(key int64) *models.NodeRepresentation {
 	}
 
 	return &aimingNode
+}
+
+func (n *Node) printState() {
+	now := time.Now()
+	time := now.Unix()
+	f, err := os.OpenFile("./state-"+fmt.Sprint(time), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Println("error to save state file")
+	}
+
+	defer f.Close()
+
+	stateStr := "Successor: " + n.fingerTable[0].Address + ", " + fmt.Sprint(n.fingerTable[0].Id)
+	stateStr += "\n Predecessor: " + n.predecessor.Address + ", " + fmt.Sprint(n.predecessor.Id)
+	stateStr += "NSuccessor: " + n.nSucc.Address + ", " + fmt.Sprint(n.nSucc.Id)
+	for i, finger := range n.fingerTable {
+		stateStr += "\n Finger " + fmt.Sprint(i) + ": " + finger.Address + ", " + fmt.Sprint(finger.Id)
+	}
+
+	if _, err := f.WriteString(stateStr); err != nil {
+		log.Println("unable to write state")
+	}
 }
