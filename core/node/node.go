@@ -40,7 +40,6 @@ func (n *Node) Start(partnerId int64, partnerAddr string) {
 	log.Println("Starting node: %v", n.id)
 	log.Println("partnerAddr: %v", partnerAddr)
 	log.Println("nodeAddr: %v", n.address)
-	log.Println("creating replicationBuffer")
 	n.replicationBuffer = make(chan storage.Entry, 50)
 	n.fingerTable = make([]models.NodeRepresentation, n.M, n.M)
 	n.storage = storage.New(models.GetMemTypeFromString(os.Getenv("STORAGE_TYPE")))
@@ -57,8 +56,8 @@ func (n *Node) Start(partnerId int64, partnerAddr string) {
 		n.Join(partner)
 	}
 
-	helpers.PeriodicInvocation(n.checkSucc, 60)
-	helpers.PeriodicInvocation(n.stabilize, 120)
+	helpers.PeriodicInvocation(n.checkSucc, 300)
+	helpers.PeriodicInvocation(n.stabilize, 360)
 
 	go n.syncReplicatedKeys()
 	n.printState()
@@ -312,7 +311,7 @@ func (n *Node) HandleNewSuccessor(newSucc models.NodeRepresentation, nNSucc mode
 	if nNSucc.Address != "" && nNSucc.Id != n.id {
 		n.nSucc = nNSucc
 	}
-
+	//it should be a msg in a channel
 	go n.syncSuccKeys()
 
 	return nil
@@ -364,7 +363,7 @@ func (n *Node) Owner(key int64) (*grpc_api.OwnerResponse, error) {
 	log.Println(aimingNode.Id)
 	log.Println(n.fingerTable[0].Address)
 	if aimingNode.Address != "" {
-		log.Println("kgoing to forward the query to:")
+		log.Println("going to forward the query to:")
 		log.Println("nodeAddress: " + aimingNode.Address)
 		client := client2.Client{}
 		return client.Owner(aimingNode.Address, key)
@@ -503,7 +502,6 @@ func (n *Node) findAimingNode(key int64) *models.NodeRepresentation {
 	aimingNode := n.fingerTable[0]
 	possibleNodes := append(n.fingerTable, n.predecessor)
 
-	//take the smallest distance node
 	smallestDistance := int64(math.Pow(2, float64(n.M))) + 1000
 	for _, node := range possibleNodes {
 		if node.Id == 0 || node.Address == "" {
