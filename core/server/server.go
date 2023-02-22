@@ -3,10 +3,13 @@ package Server
 import (
 	"context"
 	"errors"
-	"github.com/raonismaneoto/CustomDHT/commons/grpc_api"
-	"github.com/raonismaneoto/CustomDHT/core/node"
+	"io"
 	"log"
 	"strconv"
+
+	"github.com/raonismaneoto/CustomDHT/commons/grpc_api"
+	"github.com/raonismaneoto/CustomDHT/commons/helpers"
+	"github.com/raonismaneoto/CustomDHT/core/node"
 )
 
 type NodeServer struct {
@@ -98,6 +101,12 @@ func (s *NodeServer) HandleNewSuccessor(ctx context.Context, request *grpc_api.H
 }
 
 func (s *NodeServer) Query(ctx context.Context, request *grpc_api.QueryRequest) (*grpc_api.QueryResponse, error) {
+	if request.Key == 0 {
+		if request.StrKey == "" {
+			return nil, errors.New("invalid request, no key found")
+		}
+		request.Key = helpers.GetHash(request.StrKey, s.Node.M)
+	}
 	log.Println("Query call received. Key: " + strconv.FormatInt(request.Key, 10))
 	response := s.Node.Query(request.Key)
 
@@ -109,20 +118,128 @@ func (s *NodeServer) Query(ctx context.Context, request *grpc_api.QueryRequest) 
 	return &response, nil
 }
 
+func (s *NodeServer) QueryStream(request *grpc_api.QueryRequest, srv grpc_api.DHTNode_QueryStreamServer) error {
+	if request.Key == 0 {
+		if request.StrKey == "" {
+			return errors.New("invalid request, no key found")
+		}
+		request.Key = helpers.GetHash(request.StrKey, s.Node.M)
+	}
+	log.Println("Query call received. Key: " + strconv.FormatInt(request.Key, 10))
+	ctx := srv.Context()
+
+	cbuffer := make(chan grpc_api.QueryResponse)
+	go s.Node.QueryAsync(request.Key, cbuffer)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		response, ok := <-cbuffer
+		if !ok {
+			return nil
+		}
+
+		if response.ResponsibleNodeEndpoint == "" {
+			return errors.New("key not found")
+		}
+
+		if err := srv.Send(&response); err != nil {
+			log.Printf("send error %v", err)
+			return err
+		}
+	}
+}
+
 func (s *NodeServer) Save(ctx context.Context, request *grpc_api.SaveRequest) (*grpc_api.Empty, error) {
+	if request.Key == 0 {
+		if request.StrKey == "" {
+			return nil, errors.New("invalid request, no key found")
+		}
+		request.Key = helpers.GetHash(request.StrKey, s.Node.M)
+	}
 	log.Println("Save call received. Key: " + strconv.FormatInt(request.Key, 10))
 	err := s.Node.Save(request.Key, request.Data)
 	return &grpc_api.Empty{}, err
 }
 
+func (s *NodeServer) SaveStream(srv grpc_api.DHTNode_SaveStreamServer) error {
+	log.Println("save stream received ")
+	ctx := srv.Context()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		req, err := srv.Recv()
+		if err == io.EOF {
+			log.Println("exit")
+			if err = srv.SendAndClose(&grpc_api.Empty{}); err != nil {
+				return err
+			}
+			return nil
+		}
+		if err != nil {
+			log.Printf("receive error %v", err)
+			continue
+		}
+
+		if req.Key == 0 {
+			if req.StrKey == "" {
+				return errors.New("invalid request, no key found")
+			}
+			req.Key = helpers.GetHash(req.StrKey, s.Node.M)
+		}
+
+		err = s.Node.Save(req.Key, req.Data)
+		if err != nil {
+			log.Printf("received error %v", err)
+			return err
+		}
+
+	}
+}
+
 func (s *NodeServer) Delete(ctx context.Context, request *grpc_api.DeleteRequest) (*grpc_api.Empty, error) {
+	if request.Key == 0 {
+		if request.StrKey == "" {
+			return nil, errors.New("invalid request, no key found")
+		}
+		request.Key = helpers.GetHash(request.StrKey, s.Node.M)
+	}
 	log.Println("Delete call received. Key: " + strconv.FormatInt(request.Key, 10))
 	s.Node.Delete(request.Key)
 	return &grpc_api.Empty{}, nil
 }
 
 func (s *NodeServer) RepSave(ctx context.Context, request *grpc_api.RepSaveRequest) (*grpc_api.Empty, error) {
+	if request.Key == 0 {
+		if request.StrKey == "" {
+			return nil, errors.New("invalid request, no key found")
+		}
+		request.Key = helpers.GetHash(request.StrKey, s.Node.M)
+	}
 	log.Println("RepSave call received. Key: " + strconv.FormatInt(request.Key, 10))
 	s.Node.RepSave(request.Key, request.Value)
 	return &grpc_api.Empty{}, nil
+}
+
+func (s *NodeServer) Owner(ctx context.Context, request *grpc_api.OwnerRequest) (*grpc_api.OwnerResponse, error) {
+	if request.Key == 0 {
+		if request.StrKey == "" {
+			return nil, errors.New("invalid request, no key found")
+		}
+		request.Key = helpers.GetHash(request.StrKey, s.Node.M)
+	}
+	log.Println("Owner call received. Key: " + strconv.FormatInt(request.Key, 10))
+	resp, err := s.Node.Owner(request.Key)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
 }

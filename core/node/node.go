@@ -2,6 +2,7 @@ package node
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"math"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/raonismaneoto/CustomDHT/commons/grpc_api"
+	"github.com/raonismaneoto/CustomDHT/commons/helpers"
 	client2 "github.com/raonismaneoto/CustomDHT/core/client"
 	"github.com/raonismaneoto/CustomDHT/core/models"
 	"github.com/raonismaneoto/CustomDHT/core/storage"
@@ -21,12 +23,12 @@ type Node struct {
 	storage           storage.Storage
 	predecessor       models.NodeRepresentation
 	nSucc             models.NodeRepresentation
-	m                 int
+	M                 int
 	replicationBuffer chan storage.Entry
 }
 
 func New(id int64, address string, m int) *Node {
-	return &Node{id: id, address: address, m: m}
+	return &Node{id: id, address: address, M: m}
 }
 
 func (n *Node) Start(partnerId int64, partnerAddr string) {
@@ -36,9 +38,11 @@ func (n *Node) Start(partnerId int64, partnerAddr string) {
 	}
 
 	log.Println("Starting node: %v", n.id)
+	log.Println("partnerAddr: %v", partnerAddr)
+	log.Println("nodeAddr: %v", n.address)
 	log.Println("creating replicationBuffer")
 	n.replicationBuffer = make(chan storage.Entry, 50)
-	n.fingerTable = make([]models.NodeRepresentation, n.m, n.m)
+	n.fingerTable = make([]models.NodeRepresentation, n.M, n.M)
 	n.storage = storage.New(models.GetMemTypeFromString(os.Getenv("STORAGE_TYPE")))
 	n.predecessor = models.NodeRepresentation{
 		Id:      0,
@@ -53,10 +57,12 @@ func (n *Node) Start(partnerId int64, partnerAddr string) {
 		n.Join(partner)
 	}
 
-	periodicInvocation(n.checkSucc, 60)
-	periodicInvocation(n.stabilize, 120)
+	helpers.PeriodicInvocation(n.checkSucc, 60)
+	helpers.PeriodicInvocation(n.stabilize, 120)
 
 	go n.syncReplicatedKeys()
+	n.printState()
+	helpers.PeriodicInvocation(n.printState, 600)
 }
 
 func (n *Node) syncReplicatedKeys() {
@@ -150,8 +156,11 @@ func (n *Node) Save(key int64, value []byte) error {
 
 	// else the request must be passed to the responsible node
 	log.Println("going to try to forward the save")
-	response := n.Query(key)
-	_, err := client.Save(response.ResponsibleNodeEndpoint, key, value)
+	response, err := n.Owner(key)
+	if err != nil {
+		return err
+	}
+	_, err = client.Save(response.OwnerNodeEndpoint, key, value)
 	return err
 }
 
@@ -177,6 +186,74 @@ func (n *Node) Delete(key int64) error {
 	return nil
 }
 
+func (n *Node) QueryAsync(key int64, cbuffer chan grpc_api.QueryResponse) {
+	if n.mustKeyBeInNode(key) {
+		log.Println("going to return the query from this node")
+		ebuffer := make(chan error)
+		bcbuffer := make(chan []byte)
+
+		go n.storage.ReadAsync(key, bcbuffer, ebuffer)
+
+		for {
+			select {
+			case content, ok := <-bcbuffer:
+				if !ok {
+					close(cbuffer)
+					return
+				} else {
+					resp := grpc_api.QueryResponse{
+						Data:                    content,
+						ResponsibleNodeEndpoint: n.address,
+						ResponsibleNodeId:       n.id,
+					}
+					cbuffer <- resp
+				}
+			case err, ok := <-ebuffer:
+				if !ok {
+					close(cbuffer)
+					return
+				}
+				if err != nil && err.Error() == "Key not found" {
+					log.Println("Key" + strconv.FormatInt(key, 10) + " not found.")
+					resp := grpc_api.QueryResponse{
+						Data:                    []byte{},
+						ResponsibleNodeEndpoint: "",
+					}
+					cbuffer <- resp
+					close(cbuffer)
+					return
+				}
+			}
+		}
+
+	}
+
+	aimingNode := n.findAimingNode(key)
+	if aimingNode.Address != "" {
+		log.Println("key not found in node, going to forward the query to:")
+		log.Println("nodeAddress: " + aimingNode.Address)
+		client := client2.Client{}
+		owner, err := client.Owner(aimingNode.Address, key)
+		if err != nil {
+			resp := grpc_api.QueryResponse{
+				Data:                    []byte{},
+				ResponsibleNodeEndpoint: "",
+			}
+			cbuffer <- resp
+		}
+		resp := grpc_api.QueryResponse{
+			Data:                    []byte{},
+			ResponsibleNodeEndpoint: owner.OwnerNodeEndpoint,
+			ResponsibleNodeId:       owner.OwnerNodeId,
+		}
+		cbuffer <- resp
+	}
+
+	log.Println("unable to query for key" + strconv.FormatInt(key, 10))
+	log.Println("going to panic")
+	panic("unable to query for key" + strconv.FormatInt(key, 10))
+}
+
 func (n *Node) Query(key int64) grpc_api.QueryResponse {
 	if n.mustKeyBeInNode(key) {
 		log.Println("going to return the query from this node")
@@ -198,22 +275,7 @@ func (n *Node) Query(key int64) grpc_api.QueryResponse {
 		}
 	}
 
-	var aimingNode = models.NodeRepresentation{
-		Id:      0,
-		Address: "",
-	}
-
-	log.Println("looking for the closest finger for this key")
-	//take the smallest distance node
-	smallestDistance := int64(math.Pow(2, float64(n.m))) + 1000
-	for _, finger := range n.fingerTable {
-		currentDistance := distance(finger.Id, key, n.m)
-		if currentDistance < smallestDistance {
-			smallestDistance = currentDistance
-			aimingNode = finger
-		}
-	}
-
+	aimingNode := n.findAimingNode(key)
 	if aimingNode.Address != "" {
 		log.Println("key not found in node, going to forward the query to:")
 		log.Println("nodeAddress: " + aimingNode.Address)
@@ -222,6 +284,7 @@ func (n *Node) Query(key int64) grpc_api.QueryResponse {
 	}
 
 	log.Println("unable to query for key" + strconv.FormatInt(key, 10))
+	log.Println("going to panic")
 	panic("unable to query for key" + strconv.FormatInt(key, 10))
 }
 
@@ -237,7 +300,7 @@ func distance(i int64, j int64, m int) int64 {
 
 func (n *Node) HandleNewSuccessor(newSucc models.NodeRepresentation, nNSucc models.NodeRepresentation) error {
 	client := &client2.Client{}
-	if n.fingerTable[0].Address != "" && newSucc.Id > n.fingerTable[0].Id {
+	if n.fingerTable[0].Address != "" && distance(n.id, newSucc.Id, n.M) > distance(n.id, n.fingerTable[0].Id, n.M) {
 		log.Println("ping current succ")
 		_, err := client.Ping(n.fingerTable[0].Address)
 		if err == nil {
@@ -257,7 +320,7 @@ func (n *Node) HandleNewSuccessor(newSucc models.NodeRepresentation, nNSucc mode
 
 func (n *Node) HandleNewPredecessor(nPred models.NodeRepresentation) error {
 	client := &client2.Client{}
-	if nPred.Id < n.predecessor.Id {
+	if n.predecessor.Address != "" && distance(n.id, nPred.Id, n.M) < distance(n.id, n.predecessor.Id, n.M) {
 		_, err := client.Ping(n.predecessor.Address)
 		if err == nil {
 			return errors.New("invalid predecessor")
@@ -287,22 +350,54 @@ func (n *Node) Predecessor() (models.NodeRepresentation, error) {
 	return n.predecessor, nil
 }
 
+func (n *Node) Owner(key int64) (*grpc_api.OwnerResponse, error) {
+	if n.mustKeyBeInNode(key) {
+		return &grpc_api.OwnerResponse{
+			OwnerNodeId:       n.id,
+			OwnerNodeEndpoint: n.address,
+		}, nil
+	}
+
+	aimingNode := n.findAimingNode(key)
+	log.Println("aimingNOdeAddr:")
+	log.Println(aimingNode.Address)
+	log.Println(aimingNode.Id)
+	log.Println(n.fingerTable[0].Address)
+	if aimingNode.Address != "" {
+		log.Println("kgoing to forward the query to:")
+		log.Println("nodeAddress: " + aimingNode.Address)
+		client := client2.Client{}
+		return client.Owner(aimingNode.Address, key)
+	}
+
+	return nil, errors.New("unable to get the owner of the key: " + fmt.Sprint(key))
+
+}
+
 func (n *Node) stabilize() {
-	for i := 1; i < n.m; i++ {
-		currNodeInfo := n.Query((n.id + int64(math.Pow(2, float64(i-1)))) % int64(math.Pow(2, float64(n.m))))
-		if currNodeInfo.ResponsibleNodeEndpoint == "" {
+	for i := 1; i < n.M; i++ {
+		currNodeInfo, err := n.Owner((n.id + int64(math.Pow(2, float64(i-1)))) % int64(math.Pow(2, float64(n.M))))
+		if err != nil {
+			log.Println(err.Error())
 			continue
 		}
-		if currNodeInfo.ResponsibleNodeId != n.id && currNodeInfo.ResponsibleNodeEndpoint != n.address {
-			n.fingerTable[i] = models.NodeRepresentation{Id: currNodeInfo.ResponsibleNodeId, Address: currNodeInfo.ResponsibleNodeEndpoint}
+		if currNodeInfo.OwnerNodeEndpoint == "" {
+			continue
+		}
+		if currNodeInfo.OwnerNodeId != n.id && currNodeInfo.OwnerNodeEndpoint != n.address {
+			n.fingerTable[i] = models.NodeRepresentation{Id: currNodeInfo.OwnerNodeId, Address: currNodeInfo.OwnerNodeEndpoint}
 		}
 	}
 }
 
 func (n *Node) startFingerTable(partner *models.NodeRepresentation, client client2.Client) {
 	log.Println("querying succ info in startFingerTable")
-	succInfo := client.Query(partner.Address, n.id)
-	succ := models.NodeRepresentation{Id: succInfo.ResponsibleNodeId, Address: succInfo.ResponsibleNodeEndpoint}
+	succInfo, err := client.Owner(partner.Address, n.id)
+	if err != nil {
+		log.Println("going to panic: " + err.Error())
+		panic(err.Error())
+	}
+	succ := models.NodeRepresentation{Id: succInfo.OwnerNodeId, Address: succInfo.OwnerNodeEndpoint}
 	n.fingerTable[0] = succ
 
 	nSuccInfo, err := client.Successor(n.fingerTable[0].Address)
@@ -319,10 +414,14 @@ func (n *Node) startFingerTable(partner *models.NodeRepresentation, client clien
 		n.predecessor = models.NodeRepresentation{Id: predecessor.Id, Address: predecessor.Endpoint}
 	}
 
-	for i := 1; i < n.m; i++ {
-		currNodeInfo := n.Query((n.id + int64(math.Pow(2, float64(i-1)))) % int64(math.Pow(2, float64(n.m))))
-		if currNodeInfo.ResponsibleNodeId != n.id && currNodeInfo.ResponsibleNodeEndpoint != n.address {
-			n.fingerTable[i] = models.NodeRepresentation{Id: currNodeInfo.ResponsibleNodeId, Address: currNodeInfo.ResponsibleNodeEndpoint}
+	for i := 1; i < n.M; i++ {
+		currNodeInfo, err := n.Owner((n.id + int64(math.Pow(2, float64(i-1)))) % int64(math.Pow(2, float64(n.M))))
+		if err != nil {
+			log.Println(err.Error())
+			continue
+		}
+		if currNodeInfo.OwnerNodeId != n.id && currNodeInfo.OwnerNodeEndpoint != n.address {
+			n.fingerTable[i] = models.NodeRepresentation{Id: currNodeInfo.OwnerNodeId, Address: currNodeInfo.OwnerNodeEndpoint}
 		}
 	}
 }
@@ -396,18 +495,48 @@ func (n *Node) syncPredKeys() {
 	}
 }
 
-func periodicInvocation(f func(), secs int) {
-	go func() {
-		ticker := time.NewTicker(time.Duration(secs) * time.Second)
-		for {
-			select {
-			case <-ticker.C:
-				f()
-			}
-		}
-	}()
-}
-
 func (n *Node) isFingerSet(index int) bool {
 	return n.fingerTable != nil && len(n.fingerTable) >= index && n.fingerTable[index].Address != ""
+}
+
+func (n *Node) findAimingNode(key int64) *models.NodeRepresentation {
+	aimingNode := n.fingerTable[0]
+	possibleNodes := append(n.fingerTable, n.predecessor)
+
+	//take the smallest distance node
+	smallestDistance := int64(math.Pow(2, float64(n.M))) + 1000
+	for _, node := range possibleNodes {
+		if node.Id == 0 || node.Address == "" {
+			continue
+		}
+		currentDistance := distance(node.Id, key, n.M)
+		if currentDistance < smallestDistance {
+			smallestDistance = currentDistance
+			aimingNode = node
+		}
+	}
+
+	return &aimingNode
+}
+
+func (n *Node) printState() {
+	now := time.Now()
+	time := now.Unix()
+	f, err := os.OpenFile("./state-"+fmt.Sprint(time), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Println("error to save state file")
+	}
+
+	defer f.Close()
+
+	stateStr := "Successor: " + n.fingerTable[0].Address + ", " + fmt.Sprint(n.fingerTable[0].Id)
+	stateStr += "\nPredecessor: " + n.predecessor.Address + ", " + fmt.Sprint(n.predecessor.Id)
+	stateStr += "\nNSuccessor: " + n.nSucc.Address + ", " + fmt.Sprint(n.nSucc.Id)
+	for i, finger := range n.fingerTable {
+		stateStr += "\n Finger " + fmt.Sprint(i) + ": " + finger.Address + ", " + fmt.Sprint(finger.Id)
+	}
+
+	if _, err := f.WriteString(stateStr); err != nil {
+		log.Println("unable to write state")
+	}
 }

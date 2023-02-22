@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"os"
 
+	"github.com/raonismaneoto/CustomDHT/commons/helpers"
 	"github.com/raonismaneoto/CustomDHT/core/models"
 )
 
@@ -13,6 +15,7 @@ type Storage struct {
 	Type       models.MemType
 	memStorage map[int64][]byte
 	root       string
+	chunkLimit int64
 }
 
 type Entry struct {
@@ -31,7 +34,12 @@ func New(t models.MemType) Storage {
 	if s.Type == models.Disk {
 		os.Mkdir("./data", 0644)
 		s.root = "./data"
+	} else {
+		os.Mkdir("./flushed-data", 0644)
+		s.root = "./flushed-data"
+		helpers.PeriodicInvocation(s.FlushMem, 3600)
 	}
+	s.chunkLimit = 10000
 	return s
 }
 
@@ -57,7 +65,7 @@ func (s *Storage) Read(key int64) ([]byte, error) {
 	if s.Type == models.Mem {
 		data, err = s.readMem(key)
 	} else {
-		data, err = s.readDisk(key)
+		data, err = s.readDisk(key, -1, 0)
 	}
 
 	if err != nil {
@@ -84,6 +92,27 @@ func (s *Storage) Delete(key int64) error {
 	return nil
 }
 
+func (s *Storage) FlushMem() {
+	for key, value := range s.memStorage {
+		entry := Entry{Key: key, Data: value}
+		err := s.saveDisk(entry)
+		if err != nil {
+			log.Println("error when flushing to disk")
+			log.Println(err.Error())
+			continue
+		}
+		delete(s.memStorage, key)
+	}
+}
+
+func (s *Storage) ReadAsync(key int64, cbuffer chan []byte, ebuffer chan error) {
+	if s.Type == models.Mem {
+		ebuffer <- errors.New("async read is only available for Disk memory type")
+	} else {
+		s.readDiskAsync(key, cbuffer, ebuffer)
+	}
+}
+
 func (s *Storage) saveMem(data Entry) error {
 	s.memStorage[data.Key] = data.Data
 	return nil
@@ -108,12 +137,16 @@ func (s *Storage) saveDisk(data Entry) error {
 func (s *Storage) readMem(key int64) ([]byte, error) {
 	data, ok := s.memStorage[key]
 	if !ok {
-		return nil, errors.New("Key not found")
+		data, err := s.readDisk(key, -1, 0)
+		if err != nil {
+			return nil, errors.New("Key not found")
+		}
+		return data, nil
 	}
 	return data, nil
 }
 
-func (s *Storage) readDisk(key int64) ([]byte, error) {
+func (s *Storage) readDisk(key, limit, offset int64) ([]byte, error) {
 	f, err := os.Open(s.root + "/" + fmt.Sprint(key))
 	if err != nil {
 		log.Println("unable to open file %v", fmt.Sprint(key))
@@ -129,9 +162,20 @@ func (s *Storage) readDisk(key int64) ([]byte, error) {
 		return nil, err
 	}
 
-	content := make([]byte, int32(stat.Size()))
+	var contentSize int64
+	if limit == -1 {
+		contentSize = stat.Size()
+	} else {
+		if (int64(stat.Size()) - offset) < limit {
+			contentSize = (int64(stat.Size()) - offset)
+		} else {
+			contentSize = limit
+		}
+	}
 
-	if _, err := f.Read(content); err != nil {
+	content := make([]byte, contentSize)
+
+	if _, err := f.ReadAt(content, int64(offset)); err != nil {
 		log.Println("unable to read file: ", err)
 		return nil, err
 	}
@@ -146,4 +190,49 @@ func (s *Storage) deleteMem(key int64) error {
 
 func (s *Storage) deleteDisk(key int64) error {
 	return os.Remove(s.root + "/" + fmt.Sprint(key))
+}
+
+func (s *Storage) readDiskAsync(key int64, cbuffer chan []byte, ebuffer chan error) {
+	f, err := os.Open(s.root + "/" + fmt.Sprint(key))
+	if err != nil {
+		log.Println("unable to open file %v", fmt.Sprint(key))
+		log.Println(err)
+		ebuffer <- errors.New("Key not found")
+	}
+
+	defer f.Close()
+
+	stat, err := f.Stat()
+	if err != nil {
+		log.Println("unable to get file stat")
+		ebuffer <- err
+	}
+
+	limit := s.chunkLimit
+	offset := int64(0)
+
+	chuncks := int32(math.Ceil(float64(stat.Size()) / float64(s.chunkLimit)))
+	for i := int32(0); i < chuncks; i++ {
+		var contentSize int64
+
+		if (int64(stat.Size()) - offset) < limit {
+			contentSize = (int64(stat.Size()) - offset)
+		} else {
+			contentSize = limit
+		}
+
+		content := make([]byte, contentSize)
+
+		if _, err := f.ReadAt(content, int64(offset)); err != nil {
+			log.Println("unable to read file: ", err)
+			ebuffer <- err
+		}
+
+		cbuffer <- content
+
+		offset += contentSize
+	}
+
+	close(cbuffer)
+	close(ebuffer)
 }

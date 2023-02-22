@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"strconv"
+	"time"
 )
 
 func GetHash(key string, m int) int64 {
@@ -40,8 +41,20 @@ func GetOutboundIP() string {
 		log.Fatal(err)
 	}
 	defer conn.Close()
-	
+
 	localAddr := conn.LocalAddr().(*net.UDPAddr)
 
 	return localAddr.IP.String()
+}
+
+func PeriodicInvocation(f func(), secs int) {
+	go func() {
+		ticker := time.NewTicker(time.Duration(secs) * time.Second)
+		for {
+			select {
+			case <-ticker.C:
+				f()
+			}
+		}
+	}()
 }
