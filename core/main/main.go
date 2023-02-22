@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/exec"
 	"strconv"
 
 	"github.com/raonismaneoto/CustomDHT/commons/grpc_api"
@@ -36,6 +37,14 @@ func main() {
 	}
 
 	helpers.SetupLogging(nodeId)
+	helpers.PeriodicInvocation(func() {
+		cmd := exec.Command("rm", "-rf", "logs-node-*")
+		_, err := cmd.Output()
+		if err != nil {
+			log.Println(err.Error())
+		}
+		helpers.SetupLogging(nodeId)
+	}, 3600)
 
 	lis, err := net.Listen("tcp", ":"+port)
 	if err != nil {

@@ -250,6 +250,7 @@ func (n *Node) QueryAsync(key int64, cbuffer chan grpc_api.QueryResponse) {
 	}
 
 	log.Println("unable to query for key" + strconv.FormatInt(key, 10))
+	log.Println("going to panic")
 	panic("unable to query for key" + strconv.FormatInt(key, 10))
 }
 
@@ -283,6 +284,7 @@ func (n *Node) Query(key int64) grpc_api.QueryResponse {
 	}
 
 	log.Println("unable to query for key" + strconv.FormatInt(key, 10))
+	log.Println("going to panic")
 	panic("unable to query for key" + strconv.FormatInt(key, 10))
 }
 
@@ -362,7 +364,7 @@ func (n *Node) Owner(key int64) (*grpc_api.OwnerResponse, error) {
 	log.Println(aimingNode.Id)
 	log.Println(n.fingerTable[0].Address)
 	if aimingNode.Address != "" {
-		log.Println("key not found in node, going to forward the query to:")
+		log.Println("kgoing to forward the query to:")
 		log.Println("nodeAddress: " + aimingNode.Address)
 		client := client2.Client{}
 		return client.Owner(aimingNode.Address, key)
@@ -392,6 +394,7 @@ func (n *Node) startFingerTable(partner *models.NodeRepresentation, client clien
 	log.Println("querying succ info in startFingerTable")
 	succInfo, err := client.Owner(partner.Address, n.id)
 	if err != nil {
+		log.Println("going to panic: " + err.Error())
 		panic(err.Error())
 	}
 	succ := models.NodeRepresentation{Id: succInfo.OwnerNodeId, Address: succInfo.OwnerNodeEndpoint}
@@ -527,8 +530,8 @@ func (n *Node) printState() {
 	defer f.Close()
 
 	stateStr := "Successor: " + n.fingerTable[0].Address + ", " + fmt.Sprint(n.fingerTable[0].Id)
-	stateStr += "\n Predecessor: " + n.predecessor.Address + ", " + fmt.Sprint(n.predecessor.Id)
-	stateStr += "NSuccessor: " + n.nSucc.Address + ", " + fmt.Sprint(n.nSucc.Id)
+	stateStr += "\nPredecessor: " + n.predecessor.Address + ", " + fmt.Sprint(n.predecessor.Id)
+	stateStr += "\nNSuccessor: " + n.nSucc.Address + ", " + fmt.Sprint(n.nSucc.Id)
 	for i, finger := range n.fingerTable {
 		stateStr += "\n Finger " + fmt.Sprint(i) + ": " + finger.Address + ", " + fmt.Sprint(finger.Id)
 	}
