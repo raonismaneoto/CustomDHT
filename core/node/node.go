@@ -25,10 +25,11 @@ type Node struct {
 	nSucc             models.NodeRepresentation
 	M                 int
 	replicationBuffer chan storage.Entry
+	client            *client2.Client
 }
 
 func New(id int64, address string, m int) *Node {
-	return &Node{id: id, address: address, M: m}
+	return &Node{id: id, address: address, M: m, client: client2.New()}
 }
 
 func (n *Node) Start(partnerId int64, partnerAddr string) {
@@ -78,15 +79,14 @@ func (n *Node) checkSucc() {
 		return
 	}
 
-	client := &client2.Client{}
-	_, err := client.Ping(n.fingerTable[0].Address)
+	_, err := n.client.Ping(n.fingerTable[0].Address)
 
 	if err != nil {
 		if n.nSucc.Address == "" {
 			return
 		}
 
-		response, err := client.HandleNewPredecessor(n.nSucc.Address, models.NodeRepresentation{Id: n.id, Address: n.address})
+		response, err := n.client.HandleNewPredecessor(n.nSucc.Address, models.NodeRepresentation{Id: n.id, Address: n.address})
 
 		if err != nil || !response.Ok {
 			log.Println("handle new predecessor failed for nSucc.")
@@ -95,7 +95,7 @@ func (n *Node) checkSucc() {
 
 		n.fingerTable[0] = models.NodeRepresentation{Id: n.nSucc.Id, Address: n.nSucc.Address}
 
-		nSucc, err := client.Successor(n.nSucc.Address)
+		nSucc, err := n.client.Successor(n.nSucc.Address)
 		if err != nil {
 			log.Println("unable to reach nSucc in checkSucc. Err: " + err.Error())
 		}
@@ -107,18 +107,17 @@ func (n *Node) checkSucc() {
 }
 
 func (n *Node) Join(partner *models.NodeRepresentation) {
-	client := client2.Client{}
 	log.Println("Starting finger table")
-	n.startFingerTable(partner, client)
+	n.startFingerTable(partner)
 	// notify other nodes to update their predecessors and finger table
 	log.Println("Starting join notifications")
 	nodeRepresentation := models.NodeRepresentation{Id: n.id, Address: n.address}
-	newPredResponse, err := client.HandleNewPredecessor(n.fingerTable[0].Address, nodeRepresentation)
+	newPredResponse, err := n.client.HandleNewPredecessor(n.fingerTable[0].Address, nodeRepresentation)
 	if err != nil || !newPredResponse.Ok {
 		log.Println("Successor did not accept new predecessor" + err.Error())
 		panic("Successor did not accept new predecessor")
 	}
-	newSuccResponse, err := client.HandleNewSuccessor(n.predecessor.Address, nodeRepresentation, models.NodeRepresentation{Id: 0, Address: ""})
+	newSuccResponse, err := n.client.HandleNewSuccessor(n.predecessor.Address, nodeRepresentation, models.NodeRepresentation{Id: 0, Address: ""})
 	if err != nil || !newSuccResponse.Ok {
 		log.Println("Predecessor did not accept new sucessor" + err.Error())
 		panic("Predecessor did not accept new sucessor")
@@ -132,7 +131,6 @@ func (n *Node) RepSave(key int64, data []byte) {
 }
 
 func (n *Node) Save(key int64, value []byte) error {
-	client := client2.Client{}
 	if n.mustKeyBeInNode(key) {
 		log.Println("saving the data in this node")
 		err := n.storage.Save(storage.Entry{Key: key, Data: value})
@@ -143,11 +141,11 @@ func (n *Node) Save(key int64, value []byte) error {
 		inflectionPoint := (n.id-n.predecessor.Id)/2 + n.predecessor.Id
 		if key >= inflectionPoint {
 			if n.isFingerSet(0) {
-				client.RepSave(n.fingerTable[0].Address, key, value)
+				n.client.RepSave(n.fingerTable[0].Address, key, value)
 			}
 		} else {
 			if n.predecessor.Address != "" {
-				client.RepSave(n.predecessor.Address, key, value)
+				n.client.RepSave(n.predecessor.Address, key, value)
 			}
 		}
 		return nil
@@ -159,7 +157,7 @@ func (n *Node) Save(key int64, value []byte) error {
 	if err != nil {
 		return err
 	}
-	_, err = client.Save(response.OwnerNodeEndpoint, key, value)
+	_, err = n.client.Save(response.OwnerNodeEndpoint, key, value)
 	return err
 }
 
@@ -170,15 +168,14 @@ func (n *Node) Delete(key int64) error {
 		return err
 	}
 
-	client := client2.Client{}
 	inflectionPoint := (n.id-n.predecessor.Id)/2 + n.predecessor.Id
 	if key >= inflectionPoint {
 		if n.isFingerSet(0) {
-			client.Delete(n.fingerTable[0].Address, key)
+			n.client.Delete(n.fingerTable[0].Address, key)
 		}
 	} else {
 		if n.predecessor.Address != "" {
-			client.Delete(n.predecessor.Address, key)
+			n.client.Delete(n.predecessor.Address, key)
 		}
 	}
 
@@ -231,8 +228,7 @@ func (n *Node) QueryAsync(key int64, cbuffer chan grpc_api.QueryResponse) {
 	if aimingNode.Address != "" {
 		log.Println("key not found in node, going to forward the query to:")
 		log.Println("nodeAddress: " + aimingNode.Address)
-		client := client2.Client{}
-		owner, err := client.Owner(aimingNode.Address, key)
+		owner, err := n.client.Owner(aimingNode.Address, key)
 		if err != nil {
 			resp := grpc_api.QueryResponse{
 				Data:                    []byte{},
@@ -278,8 +274,7 @@ func (n *Node) Query(key int64) grpc_api.QueryResponse {
 	if aimingNode.Address != "" {
 		log.Println("key not found in node, going to forward the query to:")
 		log.Println("nodeAddress: " + aimingNode.Address)
-		client := client2.Client{}
-		return *client.Query(aimingNode.Address, key)
+		return *n.client.Query(aimingNode.Address, key)
 	}
 
 	log.Println("unable to query for key" + strconv.FormatInt(key, 10))
@@ -298,10 +293,9 @@ func distance(i int64, j int64, m int) int64 {
 }
 
 func (n *Node) HandleNewSuccessor(newSucc models.NodeRepresentation, nNSucc models.NodeRepresentation) error {
-	client := &client2.Client{}
 	if n.fingerTable[0].Address != "" && distance(n.id, newSucc.Id, n.M) > distance(n.id, n.fingerTable[0].Id, n.M) {
 		log.Println("ping current succ")
-		_, err := client.Ping(n.fingerTable[0].Address)
+		_, err := n.client.Ping(n.fingerTable[0].Address)
 		if err == nil {
 			return errors.New("invalid successor")
 		}
@@ -318,9 +312,8 @@ func (n *Node) HandleNewSuccessor(newSucc models.NodeRepresentation, nNSucc mode
 }
 
 func (n *Node) HandleNewPredecessor(nPred models.NodeRepresentation) error {
-	client := &client2.Client{}
 	if n.predecessor.Address != "" && distance(n.id, nPred.Id, n.M) < distance(n.id, n.predecessor.Id, n.M) {
-		_, err := client.Ping(n.predecessor.Address)
+		_, err := n.client.Ping(n.predecessor.Address)
 		if err == nil {
 			return errors.New("invalid predecessor")
 		}
@@ -365,8 +358,7 @@ func (n *Node) Owner(key int64) (*grpc_api.OwnerResponse, error) {
 	if aimingNode.Address != "" {
 		log.Println("going to forward the query to:")
 		log.Println("nodeAddress: " + aimingNode.Address)
-		client := client2.Client{}
-		return client.Owner(aimingNode.Address, key)
+		return n.client.Owner(aimingNode.Address, key)
 	}
 
 	return nil, errors.New("unable to get the owner of the key: " + fmt.Sprint(key))
@@ -389,9 +381,9 @@ func (n *Node) stabilize() {
 	}
 }
 
-func (n *Node) startFingerTable(partner *models.NodeRepresentation, client client2.Client) {
+func (n *Node) startFingerTable(partner *models.NodeRepresentation) {
 	log.Println("querying succ info in startFingerTable")
-	succInfo, err := client.Owner(partner.Address, n.id)
+	succInfo, err := n.client.Owner(partner.Address, n.id)
 	if err != nil {
 		log.Println("going to panic: " + err.Error())
 		panic(err.Error())
@@ -399,14 +391,14 @@ func (n *Node) startFingerTable(partner *models.NodeRepresentation, client clien
 	succ := models.NodeRepresentation{Id: succInfo.OwnerNodeId, Address: succInfo.OwnerNodeEndpoint}
 	n.fingerTable[0] = succ
 
-	nSuccInfo, err := client.Successor(n.fingerTable[0].Address)
+	nSuccInfo, err := n.client.Successor(n.fingerTable[0].Address)
 	if err != nil {
 		//if the partner does not have successor it does not have predecessor either
 		log.Println("Unable to find nsucc on finger table startup. Err: %v", err)
 		n.predecessor = succ
 	} else {
 		n.nSucc = models.NodeRepresentation{Id: nSuccInfo.Id, Address: nSuccInfo.Endpoint}
-		predecessor, err := client.Predecessor(n.fingerTable[0].Address)
+		predecessor, err := n.client.Predecessor(n.fingerTable[0].Address)
 		if err != nil {
 			log.Println(err.Error())
 		}
@@ -438,16 +430,14 @@ func (n *Node) mustKeyBeInNode(key int64) bool {
 }
 
 func (n *Node) keysRange() (int64, int64) {
-	client := &client2.Client{}
-	predOfPred, _ := client.Predecessor(n.predecessor.Address)
+	predOfPred, _ := n.client.Predecessor(n.predecessor.Address)
 	start := (n.predecessor.Id-predOfPred.Id)/2 + predOfPred.Id
 	end := (n.nSucc.Id-n.fingerTable[0].Id)/2 + n.fingerTable[0].Id
 	return start, end
 }
 
 func (n *Node) syncKey(address string, key int64) {
-	client := client2.Client{}
-	response := client.Query(address, key)
+	response := n.client.Query(address, key)
 	if response.Data != nil && len(response.Data) > 0 {
 		err := n.storage.Save(storage.Entry{Key: key, Data: response.Data})
 		if err != nil {
@@ -481,8 +471,7 @@ func (n *Node) syncSuccKeys() {
 }
 
 func (n *Node) syncPredKeys() {
-	client := &client2.Client{}
-	predOfPred, _ := client.Predecessor(n.predecessor.Address)
+	predOfPred, _ := n.client.Predecessor(n.predecessor.Address)
 	if predOfPred.Endpoint == "" {
 		return
 	}
