@@ -21,7 +21,7 @@ func New() *Client {
 	return c
 }
 
-func (c *Client) Ping(address string) (grpc_api.Empty, error) {
+func (c *Client) Ping(address string) (*grpc_api.Empty, error) {
 	nc := c.getClient(address)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
@@ -30,10 +30,10 @@ func (c *Client) Ping(address string) (grpc_api.Empty, error) {
 	response, err := nc.Ping(ctx, &grpc_api.Empty{})
 
 	if err != nil {
-		return *response, err
+		return response, err
 	}
 
-	return *response, nil
+	return response, nil
 }
 
 func (c *Client) HandleNewSuccessor(receiverAddress string, newSucc models.NodeRepresentation, nNSucc models.NodeRepresentation) (*grpc_api.HandleNewSuccessorResponse, error) {
@@ -294,9 +294,15 @@ func (c *Client) Owner(address string, key int64) (*grpc_api.OwnerResponse, erro
 }
 
 func (c *Client) getClient(address string) grpc_api.DHTNodeClient {
-	conn, ok := c.connections[address]
+	var (
+		conn *grpc.ClientConn
+		err  error
+		ok   bool
+	)
+
+	conn, ok = c.connections[address]
 	if !ok {
-		conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
+		conn, err = grpc.Dial(address, grpc.WithInsecure(), grpc.WithBlock())
 		if err != nil {
 			log.Println(err.Error())
 			panic(err.Error())
@@ -304,6 +310,5 @@ func (c *Client) getClient(address string) grpc_api.DHTNodeClient {
 		c.connections[address] = conn
 	}
 
-	log.Println("Grpc connection started.")
 	return grpc_api.NewDHTNodeClient(conn)
 }
