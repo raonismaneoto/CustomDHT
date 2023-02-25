@@ -1,7 +1,8 @@
-package Client
+package client
 
 import (
 	"context"
+	"io"
 	"log"
 	"time"
 
@@ -179,6 +180,92 @@ func (c *Client) Query(address string, key int64) *grpc_api.QueryResponse {
 	}
 
 	return response
+}
+
+func (c *Client) SaveAsync(address, key string, content chan []byte, errors chan error) {
+	nc := c.getClient(address)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	client, err := nc.SaveStream(ctx)
+	if err != nil {
+		log.Println(err.Error())
+	}
+
+	for {
+		select {
+		case <-client.Context().Done():
+			errors <- client.Context().Err()
+			close(errors)
+			return
+		default:
+		}
+
+		currContent, ok := <-content
+		if !ok {
+			if _, err := client.CloseAndRecv(); err != nil {
+				errors <- err
+			}
+			close(errors)
+			return
+		}
+
+		req := grpc_api.SaveRequest{
+			StrKey: key,
+			Data:   currContent,
+		}
+
+		if err := client.Send(&req); err != nil {
+			log.Printf("send error %v", err)
+		}
+	}
+}
+
+func (c *Client) QueryAsync(address, key string, content chan []byte, errors chan error) {
+	nc := c.getClient(address)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	srv, err := nc.QueryStream(ctx, &grpc_api.QueryRequest{StrKey: key})
+	if err != nil {
+		log.Println("error when stablishing connection with stream server: %v", err.Error())
+		close(content)
+		errors <- err
+		close(errors)
+	}
+	for {
+		select {
+		case <-srv.Context().Done():
+			errors <- srv.Context().Err()
+			close(errors)
+			return
+		default:
+		}
+
+		resp, err := srv.Recv()
+		if err == io.EOF {
+			close(content)
+			errors <- err
+			close(errors)
+			return
+		}
+		if err != nil {
+			log.Printf("receive error %v", err)
+			close(content)
+			errors <- err
+			close(errors)
+			return
+		}
+
+		if resp.ResponsibleNodeEndpoint != "" && len(resp.Data) == 0 {
+			c.QueryAsync(resp.ResponsibleNodeEndpoint, key, content, errors)
+			return
+		}
+
+		content <- resp.Data
+	}
 }
 
 func (c *Client) RepSave(address string, key int64, value []byte) (*grpc_api.Empty, error) {
