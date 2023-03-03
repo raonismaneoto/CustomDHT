@@ -1,0 +1,44 @@
+#!/bin/bash
+
+usage() {
+    echo "USAGE:"
+    echo "install-node [options]"
+    echo "OPTIONS:"
+    echo "-e|--env-file env-file-path"
+}
+
+check_dependencies() {
+    sudo docker --version
+    [ ! "$?" -eq 0 ] && echo "docker is not installed" && exit 1
+}
+
+select_env_file() {
+    env_file=".env"
+    while getopts "e:" options; do
+        case ${options} in
+            e|--env-file)
+                env_file=${OPTARG}
+                ;;
+        esac
+    done
+    echo $env_file
+}
+
+run() {
+    local IMAGE_NAME=dht-node
+    local IMAGE_VERSION=latest
+    local IMAGE=$IMAGE_NAME:$IMAGE_VERSION
+    local CONTAINER_NAME=DHT-NODE-$RANDOM
+    sudo docker build --no-cache --build-arg PORT_ARG=$1 -f node.Dockerfile -t raonismaneoto/$IMAGE .
+    sudo docker run --name $CONTAINER_NAME -p $1:$1 --env-file $2 -idt raonismaneoto/$IMAGE
+}
+
+main() {
+    [ ! "$#" -eq 0 ] && [ ! "$#" -eq 1 ] && usage && exit 1
+    check_dependencies
+    env_file=$(select_env_file $@)
+    local PORT=$(grep ^NODE_PORT $env_file | awk -F "=" '{print $2}')
+    run $PORT $env_file
+}
+
+main $@ 
