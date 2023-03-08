@@ -296,6 +296,34 @@ func (c *Client) RepSave(address string, key int64, value []byte) (*grpc_api.Emp
 	return response, nil
 }
 
+func (c *Client) SaveWithStrKey(address, key string, value []byte) (*grpc_api.Empty, error) {
+	nc := c.getClient(address)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	var (
+		response *grpc_api.Empty
+		err      error
+	)
+
+	retryable := func() error {
+		response, err = nc.Save(ctx, &grpc_api.SaveRequest{StrKey: key, Data: value})
+		return err
+	}
+
+	b := backoff.NewExponentialBackOff()
+	b.MaxElapsedTime = time.Second * 10
+
+	backoff.Retry(retryable, b)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
 func (c *Client) Save(address string, key int64, value []byte) (*grpc_api.Empty, error) {
 	nc := c.getClient(address)
 
