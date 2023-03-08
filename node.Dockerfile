@@ -20,4 +20,4 @@ WORKDIR /usr/local/bin
 
 EXPOSE $PORT_ARG 8000 8090 8080
 
-CMD ("main 2>output.err")
+CMD ["main", "2>output.err"]
