@@ -18,6 +18,6 @@ RUN echo 'export PATH=$PATH:/usr/local/bin' >> ~/.bashrc
 
 WORKDIR /usr/local/bin
 
-EXPOSE $PORT_ARG
+EXPOSE $PORT_ARG 8000 8090 8080
 
-CMD ("/bin/sh")
+CMD ["main", "2>output.err"]
