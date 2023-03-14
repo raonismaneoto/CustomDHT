@@ -182,6 +182,38 @@ func (c *Client) Query(address string, key int64) *grpc_api.QueryResponse {
 	return response
 }
 
+func (c *Client) QueryWithStrKey(address string, key string) *grpc_api.QueryResponse {
+	nc := c.getClient(address)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	var (
+		response *grpc_api.QueryResponse
+		err      error
+	)
+
+	retryable := func() error {
+		response, err = nc.Query(ctx, &grpc_api.QueryRequest{StrKey: key})
+		return err
+	}
+
+	b := backoff.NewExponentialBackOff()
+	b.MaxElapsedTime = time.Second * 10
+
+	backoff.Retry(retryable, b)
+
+	if err != nil {
+		return &grpc_api.QueryResponse{
+			Data:                    nil,
+			ResponsibleNodeId:       0,
+			ResponsibleNodeEndpoint: "",
+		}
+	}
+
+	return response
+}
+
 func (c *Client) SaveAsync(address, key string, content chan []byte, errors chan error) {
 	nc := c.getClient(address)
 
@@ -365,6 +397,34 @@ func (c *Client) Delete(address string, key int64) (*grpc_api.Empty, error) {
 
 	retryable := func() error {
 		response, err = nc.Delete(ctx, &grpc_api.DeleteRequest{Key: key})
+		return err
+	}
+
+	b := backoff.NewExponentialBackOff()
+	b.MaxElapsedTime = time.Second * 10
+
+	backoff.Retry(retryable, b)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
+func (c *Client) DeleteWithStrKey(address string, key string) (*grpc_api.Empty, error) {
+	nc := c.getClient(address)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	var (
+		response *grpc_api.Empty
+		err      error
+	)
+
+	retryable := func() error {
+		response, err = nc.Delete(ctx, &grpc_api.DeleteRequest{StrKey: key})
 		return err
 	}
 
