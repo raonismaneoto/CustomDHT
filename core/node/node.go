@@ -388,15 +388,20 @@ func (n *Node) startFingerTable(partner *models.NodeRepresentation) {
 		log.Println("going to panic: " + err.Error())
 		panic(err.Error())
 	}
+	log.Println("setting successor")
 	succ := models.NodeRepresentation{Id: succInfo.OwnerNodeId, Address: succInfo.OwnerNodeEndpoint}
 	n.fingerTable[0] = succ
-
+	log.Println("going to reach the succ of ", n.fingerTable[0].Address)
 	nSuccInfo, err := n.client.Successor(n.fingerTable[0].Address)
+	log.Println("nsucc resp:")
+	log.Println(nSuccInfo)
+	log.Println(err)
 	if err != nil {
 		//if the partner does not have successor it does not have predecessor either
 		log.Println("Unable to find nsucc on finger table startup. Err: %v", err)
 		n.predecessor = succ
 	} else {
+		log.Println("nsucc found")
 		n.nSucc = models.NodeRepresentation{Id: nSuccInfo.Id, Address: nSuccInfo.Endpoint}
 		predecessor, err := n.client.Predecessor(n.fingerTable[0].Address)
 		if err != nil {
@@ -404,9 +409,11 @@ func (n *Node) startFingerTable(partner *models.NodeRepresentation) {
 		}
 		n.predecessor = models.NodeRepresentation{Id: predecessor.Id, Address: predecessor.Endpoint}
 	}
-
+	log.Println("iteration to set fingertable")
 	for i := 1; i < n.M; i++ {
-		currNodeInfo, err := n.Owner((n.id + int64(math.Pow(2, float64(i-1)))) % int64(math.Pow(2, float64(n.M))))
+		key := (n.id + int64(math.Pow(2, float64(i-1)))) % int64(math.Pow(2, float64(n.M)))
+		log.Println("going to reach the owner of key ", key)
+		currNodeInfo, err := n.Owner(key)
 		if err != nil {
 			log.Println(err.Error())
 			continue

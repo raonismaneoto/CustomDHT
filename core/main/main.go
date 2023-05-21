@@ -15,7 +15,7 @@ import (
 
 func main() {
 	port := os.Getenv("NODE_PORT")
-	address := helpers.GetOutboundIP() + ":" + port
+	address := os.Getenv("NODE_ADDR") + ":" + port
 	m, err := strconv.Atoi(os.Getenv("M"))
 
 	if err != nil {
